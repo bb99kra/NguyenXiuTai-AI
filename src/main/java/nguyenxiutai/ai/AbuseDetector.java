@@ -1,7 +1,6 @@
 package nguyenxiutai.ai;
 
 import java.io.File;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -101,7 +100,10 @@ public class AbuseDetector {
         }
 
         // Determine if suspicious
-        boolean suspicious = abnormalRatio || newAccountBonus || minBetFarming || ipCluster;
+        // min-bet farming alone is NOT suspicious (conservative players exist).
+        // It only counts when combined with another signal.
+        boolean minBetWithOtherSignal = minBetFarming && (abnormalRatio || newAccountBonus || ipCluster);
+        boolean suspicious = abnormalRatio || newAccountBonus || minBetWithOtherSignal || ipCluster;
 
         if (suspicious) {
             profile.flagged = true;
@@ -145,14 +147,36 @@ public class AbuseDetector {
     }
 
     /**
-     * Track player IP for cluster detection.
+     * Track player IP (hashed) for cluster detection.
+     * IP is SHA-256 hashed before storage for privacy.
      * Call from PlayerJoinEvent if IP is available.
      */
     public void trackPlayerIp(UUID uuid, String ip) {
         if (ip == null || ip.isEmpty()) return;
-        List<UUID> accounts = ipToAccounts.computeIfAbsent(ip, k -> new ArrayList<>());
+        String hashedIp = hashIp(ip);
+        List<UUID> accounts = ipToAccounts.computeIfAbsent(hashedIp, k -> new ArrayList<>());
         if (!accounts.contains(uuid)) {
             accounts.add(uuid);
+        }
+    }
+
+    /**
+     * SHA-256 hash IP with fixed salt for privacy.
+     * Stored in memory and persisted file as hash only.
+     */
+    private String hashIp(String ip) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            // Fixed salt — not secret, just prevents rainbow table lookup
+            String salted = "nxt-abuse-" + ip + "-salt-2026";
+            byte[] hash = md.digest(salted.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString().substring(0, 16); // Truncate for storage
+        } catch (Exception e) {
+            return ip.hashCode() + ""; // Fallback
         }
     }
 

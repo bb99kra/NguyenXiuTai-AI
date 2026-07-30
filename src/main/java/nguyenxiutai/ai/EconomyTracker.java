@@ -97,8 +97,17 @@ public class EconomyTracker {
     }
 
     /**
-     * Read total money supply across ALL players via Vault.
+     * Read total money supply across online players via Vault.
      * This is expensive — called sparingly (once per session).
+     *
+     * NOTE: Only reads ONLINE players. Offline players with large balances
+     * are not counted, so M2 may be underestimated on servers where most
+     * money is held by offline accounts. The TREND (growth rate) still
+     * works as a signal — absolute numbers matter less than direction.
+     *
+     * For EssentialsX: getAccounts() could enumerate all known accounts,
+     * but iterating hundreds of offline players each session is too expensive.
+     * A future improvement could cache offline balances periodically.
      */
     private long readTotalServerSupply() {
         try {
