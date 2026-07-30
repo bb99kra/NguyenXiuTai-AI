@@ -29,6 +29,8 @@ public class AIDataManager {
     private final Map<UUID, PlayerData> playerDataMap = new ConcurrentHashMap<>();
 
     // Daily stats
+    // Daily stats - HashMap is safe here because all access is on Bukkit main thread.
+    // If async features are added (e.g. webhook reports), switch to ConcurrentHashMap.
     private final Map<String, DailyStats> dailyStatsMap = new HashMap<>();
     private String today;
 

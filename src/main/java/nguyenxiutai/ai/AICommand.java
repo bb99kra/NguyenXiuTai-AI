@@ -28,7 +28,6 @@ public class AICommand {
      * Called from TaiXiuCommand router (args[0]="ai", args[1]=sub, ...)
      */
     public boolean handleCommand(CommandSender sender, String[] args) {
-        // Allow console for status, economy, reload, bots
         boolean isPlayer = sender instanceof Player;
 
         if (args.length < 2) {
@@ -36,25 +35,33 @@ public class AICommand {
             return true;
         }
 
-        // Admin check for all AI commands
+        String sub = args[1].toLowerCase();
+
+        // Public commands — any player can view
+        switch (sub) {
+            case "status":
+                showStatus(sender);
+                return true;
+            case "streak":
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
+                showStreak((Player) sender);
+                return true;
+            case "predict":
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
+                showPrediction((Player) sender);
+                return true;
+            case "heatmap":
+                sender.sendMessage("§eSử dụng: /cau để xem heatmap");
+                return true;
+        }
+
+        // Admin commands — require permission
         if (!sender.hasPermission("nguyenxiutai.admin")) {
             sender.sendMessage("§cBạn không có quyền sử dụng lệnh này!");
             return true;
         }
 
-        String sub = args[1].toLowerCase();
         switch (sub) {
-            case "status":
-                showStatus(sender);
-                break;
-            case "streak":
-                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
-                showStreak((Player) sender);
-                break;
-            case "predict":
-                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
-                showPrediction((Player) sender);
-                break;
             case "player":
                 if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
                 if (args.length >= 3) {
@@ -72,11 +79,6 @@ public class AICommand {
             case "reload":
                 reloadConfig();
                 sender.sendMessage("§a✅ Đã reload AI config!");
-                break;
-            case "heatmap":
-                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
-                // HeatMapGUI is accessed via plugin
-                sender.sendMessage("§eSử dụng: /cau để xem heatmap");
                 break;
             default:
                 showHelp(sender);

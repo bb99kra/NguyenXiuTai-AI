@@ -22,5 +22,8 @@ commands:
     usage: /cau
 permissions:
   nguyenxiutai.admin:
-    description: Admin permission
+    description: Admin permission (reload, economy, bots, player analysis)
     default: op
+  nguyenxiutai.ai.view:
+    description: View AI status, streak, prediction
+    default: true

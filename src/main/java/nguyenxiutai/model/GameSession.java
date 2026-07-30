@@ -3,6 +3,7 @@ package nguyenxiutai.model;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class GameSession {
     private final int sessionId;
@@ -16,10 +17,13 @@ public class GameSession {
     private volatile int[] diceResults;
     private volatile boolean isTaiResult;
     private volatile boolean jackpot;
-    private volatile long cachedTaiTotal = 0L;
-    private volatile long cachedXiuTotal = 0L;
-    private volatile long cachedBotTaiTotal = 0L;
-    private volatile long cachedBotXiuTotal = 0L;
+    // AtomicLong for thread-safe total accumulation
+    // NOTE: addTaiBet/addXiuBet are currently always called under GameManager.betLock.
+    // If calling from other contexts in the future, these atomics ensure correctness.
+    private final AtomicLong cachedTaiTotal = new AtomicLong(0);
+    private final AtomicLong cachedXiuTotal = new AtomicLong(0);
+    private final AtomicLong cachedBotTaiTotal = new AtomicLong(0);
+    private final AtomicLong cachedBotXiuTotal = new AtomicLong(0);
 
     public GameSession(int id, long hu) {
         this.sessionId = id;
@@ -33,23 +37,22 @@ public class GameSession {
     // === Real player bets ===
     public void addTaiBet(UUID p, long a) {
         this.taiBets.merge(p, a, Long::sum);
-        this.cachedTaiTotal += a;
+        this.cachedTaiTotal.addAndGet(a);
     }
 
     public void addXiuBet(UUID p, long a) {
         this.xiuBets.merge(p, a, Long::sum);
-        this.cachedXiuTotal += a;
+        this.cachedXiuTotal.addAndGet(a);
     }
 
-    // FIX #2: Bot bets are separate
     public void addBotTaiBet(UUID p, long a) {
         this.botTaiBets.merge(p, a, Long::sum);
-        this.cachedBotTaiTotal += a;
+        this.cachedBotTaiTotal.addAndGet(a);
     }
 
     public void addBotXiuBet(UUID p, long a) {
         this.botXiuBets.merge(p, a, Long::sum);
-        this.cachedBotXiuTotal += a;
+        this.cachedBotXiuTotal.addAndGet(a);
     }
 
     // FIX #4: Get current bet for a player on a specific side
@@ -72,16 +75,15 @@ public class GameSession {
     }
 
     public long getTaiTotal() {
-        return this.cachedTaiTotal;
+        return this.cachedTaiTotal.get();
     }
 
     public long getXiuTotal() {
-        return this.cachedXiuTotal;
+        return this.cachedXiuTotal.get();
     }
 
-    // Bot totals (for display)
-    public long getBotTaiTotal() { return this.cachedBotTaiTotal; }
-    public long getBotXiuTotal() { return this.cachedBotXiuTotal; }
+    public long getBotTaiTotal() { return this.cachedBotTaiTotal.get(); }
+    public long getBotXiuTotal() { return this.cachedBotXiuTotal.get(); }
 
     public Map<UUID, Long> getTaiBets() {
         return this.taiBets;

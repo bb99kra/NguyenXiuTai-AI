@@ -2,7 +2,6 @@ package nguyenxiutai.ai;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -13,7 +12,6 @@ public class SmartBot {
 
     private final AIConfig config;
     private final List<BotPlayer> bots = new ArrayList<>();
-    private final Random random = ThreadLocalRandom.current();
 
     // Vietnamese-style bot names
     private static final String[] BOT_NAMES = {
@@ -66,7 +64,7 @@ public class SmartBot {
         AIEngine.StreakInfo streak = engine.getStreakInfo();
 
         for (BotPlayer bot : bots) {
-            if (random.nextDouble() > 0.7) continue; // 30% chance bot skips this session
+            if (ThreadLocalRandom.current().nextDouble() > 0.7) continue; // 30% chance bot skips this session
 
             boolean isTai = decideBotSide(bot, streak);
             long amount = decideBotAmount(bot, engine);
@@ -87,35 +85,35 @@ public class SmartBot {
         switch (bot.personality) {
             case AGGRESSIVE:
                 // Bets against streak
-                if (streak.count >= 3 && random.nextDouble() < streakReaction) {
+                if (streak.count >= 3 && ThreadLocalRandom.current().nextDouble() < streakReaction) {
                     return !streak.side; // Opposite of streak
                 }
-                return random.nextBoolean();
+                return ThreadLocalRandom.current().nextBoolean();
 
             case CONSERVATIVE:
                 // Bets with streak (safer)
-                if (streak.count >= 3 && random.nextDouble() < 0.4) {
+                if (streak.count >= 3 && ThreadLocalRandom.current().nextDouble() < 0.4) {
                     return streak.side; // Follow streak
                 }
-                return random.nextBoolean();
+                return ThreadLocalRandom.current().nextBoolean();
 
             case FOLLOWER:
                 // Always follows the streak
                 if (streak.count >= 2) {
                     return streak.side;
                 }
-                return random.nextBoolean();
+                return ThreadLocalRandom.current().nextBoolean();
 
             case CONTRARIAN:
                 // Always opposite of streak
                 if (streak.count >= 2) {
                     return !streak.side;
                 }
-                return random.nextBoolean();
+                return ThreadLocalRandom.current().nextBoolean();
 
             case BALANCED:
             default:
-                return random.nextBoolean();
+                return ThreadLocalRandom.current().nextBoolean();
         }
     }
 
@@ -129,21 +127,21 @@ public class SmartBot {
         switch (bot.personality) {
             case AGGRESSIVE:
                 // Bets 60-100% of max
-                return min + (long)(random.nextDouble() * 0.4 * (max - min) + 0.6 * (max - min));
+                return min + (long)(ThreadLocalRandom.current().nextDouble() * 0.4 * (max - min) + 0.6 * (max - min));
 
             case CONSERVATIVE:
                 // Bets 10-30% of max
-                return min + (long)(random.nextDouble() * 0.2 * (max - min));
+                return min + (long)(ThreadLocalRandom.current().nextDouble() * 0.2 * (max - min));
 
             case FOLLOWER:
             case CONTRARIAN:
                 // Bets 20-60% of max
-                return min + (long)(random.nextDouble() * 0.4 * (max - min) + 0.2 * (max - min));
+                return min + (long)(ThreadLocalRandom.current().nextDouble() * 0.4 * (max - min) + 0.2 * (max - min));
 
             case BALANCED:
             default:
                 // Bets 30-70% of max
-                return min + (long)(random.nextDouble() * 0.4 * (max - min) + 0.3 * (max - min));
+                return min + (long)(ThreadLocalRandom.current().nextDouble() * 0.4 * (max - min) + 0.3 * (max - min));
         }
     }
 
@@ -186,7 +184,7 @@ public class SmartBot {
     private String[] shuffleArray(String[] arr) {
         String[] copy = arr.clone();
         for (int i = copy.length - 1; i > 0; i--) {
-            int j = random.nextInt(i + 1);
+            int j = ThreadLocalRandom.current().nextInt(i + 1);
             String temp = copy[i];
             copy[i] = copy[j];
             copy[j] = temp;
