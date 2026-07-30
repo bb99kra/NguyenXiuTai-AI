@@ -1,6 +1,5 @@
 package nguyenxiutai;
 
-import java.io.File;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -110,18 +109,9 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         this.economyTracker = new EconomyTracker(this, this.aiConfig);
         this.abuseDetector = new AbuseDetector(this, this.aiConfig);
 
-        // Load saved data for new modules
-        try {
-            File aiDataFile = new File(this.getDataFolder(), "ai-data.yml");
-            if (aiDataFile.exists()) {
-                org.bukkit.configuration.file.YamlConfiguration aiData =
-                    org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
-                this.economyTracker.load(aiData);
-                this.abuseDetector.load(aiData);
-            }
-        } catch (Exception e) {
-            this.getLogger().warning("[AI] Failed to load economy/abuse data: " + e.getMessage());
-        }
+        // Each module loads from its own file
+        this.economyTracker.load();
+        this.abuseDetector.load();
 
         // === Game Manager with AI ===
         this.gameManager = new GameManager(this, eco, this.bossBarManager, discord, msgManager, this.statsManager);
@@ -179,17 +169,9 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         if (this.aiDataManager != null) {
             this.aiDataManager.save();
         }
-        // Save economy tracker and abuse detector data
-        try {
-            File aiDataFile = new File(this.getDataFolder(), "ai-data.yml");
-            org.bukkit.configuration.file.YamlConfiguration aiData =
-                org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
-            if (this.economyTracker != null) this.economyTracker.save(aiData);
-            if (this.abuseDetector != null) this.abuseDetector.save(aiData);
-            aiData.save(aiDataFile);
-        } catch (Exception e) {
-            this.getLogger().warning("[AI] Failed to save economy/abuse data: " + e.getMessage());
-        }
+        // Each module saves to its own file
+        if (this.economyTracker != null) this.economyTracker.save();
+        if (this.abuseDetector != null) this.abuseDetector.save();
     }
 
     // === Getters for AI ===

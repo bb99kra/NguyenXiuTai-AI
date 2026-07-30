@@ -24,6 +24,7 @@ public class EconomyTracker {
 
     private final JavaPlugin plugin;
     private final AIConfig config;
+    private final File trackerFile;
 
     // Rolling window of total money supply snapshots (per session)
     private final Deque<MoneySnapshot> supplyHistory = new ArrayDeque<>();
@@ -50,6 +51,7 @@ public class EconomyTracker {
     public EconomyTracker(JavaPlugin plugin, AIConfig config) {
         this.plugin = plugin;
         this.config = config;
+        this.trackerFile = new File(plugin.getDataFolder(), "economy-tracker.yml");
     }
 
     /**
@@ -250,43 +252,55 @@ public class EconomyTracker {
         edgeSmoothingFactor = c.getDouble("economy-tracker.edge-smoothing", 0.3);
     }
 
-    // === Persistence ===
+    // === Persistence (own file: economy-tracker.yml) ===
 
-    public void save(YamlConfiguration c) {
-        c.set("economy-tracker.last-total-supply", lastTotalSupply);
-        c.set("economy-tracker.last-plugin-fund", lastPluginFund);
-        c.set("economy-tracker.m2-growth-rate", currentM2GrowthRate);
+    public void save() {
+        try {
+            YamlConfiguration c = new YamlConfiguration();
+            c.set("economy-tracker.last-total-supply", lastTotalSupply);
+            c.set("economy-tracker.last-plugin-fund", lastPluginFund);
+            c.set("economy-tracker.m2-growth-rate", currentM2GrowthRate);
 
-        int i = 0;
-        for (MoneySnapshot s : supplyHistory) {
-            if (i >= 100) break; // Save last 100
-            String key = "economy-tracker.history." + i;
-            c.set(key + ".time", s.timestamp);
-            c.set(key + ".supply", s.totalSupply);
-            c.set(key + ".fund", s.pluginFund);
-            c.set(key + ".players", s.onlinePlayers);
-            i++;
+            int i = 0;
+            for (MoneySnapshot s : supplyHistory) {
+                if (i >= 100) break;
+                String key = "history." + i;
+                c.set(key + ".time", s.timestamp);
+                c.set(key + ".supply", s.totalSupply);
+                c.set(key + ".fund", s.pluginFund);
+                c.set(key + ".players", s.onlinePlayers);
+                i++;
+            }
+            c.save(trackerFile);
+        } catch (Exception e) {
+            plugin.getLogger().warning("[AI] Failed to save economy-tracker.yml: " + e.getMessage());
         }
     }
 
-    public void load(YamlConfiguration c) {
-        lastTotalSupply = c.getLong("economy-tracker.last-total-supply", 0);
-        lastPluginFund = c.getLong("economy-tracker.last-plugin-fund", 0);
-        currentM2GrowthRate = c.getDouble("economy-tracker.m2-growth-rate", 0);
+    public void load() {
+        if (!trackerFile.exists()) return;
+        try {
+            YamlConfiguration c = YamlConfiguration.loadConfiguration(trackerFile);
+            lastTotalSupply = c.getLong("economy-tracker.last-total-supply", 0);
+            lastPluginFund = c.getLong("economy-tracker.last-plugin-fund", 0);
+            currentM2GrowthRate = c.getDouble("economy-tracker.m2-growth-rate", 0);
 
-        if (c.getConfigurationSection("economy-tracker.history") != null) {
-            for (String key : c.getConfigurationSection("economy-tracker.history").getKeys(false)) {
-                try {
-                    String path = "economy-tracker.history." + key;
-                    MoneySnapshot s = new MoneySnapshot(
-                        c.getLong(path + ".time"),
-                        c.getLong(path + ".supply"),
-                        c.getLong(path + ".fund"),
-                        c.getInt(path + ".players")
-                    );
-                    supplyHistory.addLast(s);
-                } catch (Exception ignored) {}
+            if (c.getConfigurationSection("history") != null) {
+                for (String key : c.getConfigurationSection("history").getKeys(false)) {
+                    try {
+                        String path = "history." + key;
+                        MoneySnapshot s = new MoneySnapshot(
+                            c.getLong(path + ".time"),
+                            c.getLong(path + ".supply"),
+                            c.getLong(path + ".fund"),
+                            c.getInt(path + ".players")
+                        );
+                        supplyHistory.addLast(s);
+                    } catch (Exception ignored) {}
+                }
             }
+        } catch (Exception e) {
+            plugin.getLogger().warning("[AI] Failed to load economy-tracker.yml: " + e.getMessage());
         }
     }
 

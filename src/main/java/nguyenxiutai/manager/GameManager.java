@@ -193,17 +193,9 @@ public class GameManager {
                 if (GameManager.this.aiDataManager != null) {
                     GameManager.this.aiDataManager.save();
                 }
-                // Save economy tracker + abuse detector
-                try {
-                    File aiDataFile = new File(GameManager.this.plugin.getDataFolder(), "ai-data.yml");
-                    org.bukkit.configuration.file.YamlConfiguration aiData =
-                        org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
-                    if (GameManager.this.economyTracker != null) GameManager.this.economyTracker.save(aiData);
-                    if (GameManager.this.abuseDetector != null) GameManager.this.abuseDetector.save(aiData);
-                    aiData.save(aiDataFile);
-                } catch (Exception ex) {
-                    GameManager.this.plugin.getLogger().fine("[AI] Failed to save tracker data");
-                }
+                // Each module saves to its own file
+                if (GameManager.this.economyTracker != null) GameManager.this.economyTracker.save();
+                if (GameManager.this.abuseDetector != null) GameManager.this.abuseDetector.save();
             }
         }.runTaskTimer(this.plugin, intervalSeconds * 20L, intervalSeconds * 20L);
     }

@@ -1,6 +1,7 @@
 package nguyenxiutai.ai;
 
 import java.io.File;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +27,7 @@ public class AbuseDetector {
 
     private final JavaPlugin plugin;
     private final AIConfig config;
+    private final File abuseFile;
 
     // Per-player abuse tracking
     private final Map<UUID, PlayerAbuseProfile> profiles = new HashMap<>();
@@ -49,6 +51,7 @@ public class AbuseDetector {
     public AbuseDetector(JavaPlugin plugin, AIConfig config) {
         this.plugin = plugin;
         this.config = config;
+        this.abuseFile = new File(plugin.getDataFolder(), "abuse-detection.yml");
     }
 
     /**
@@ -218,49 +221,61 @@ public class AbuseDetector {
         ipClusterThreshold = c.getDouble("abuse-detection.ip-cluster-threshold", 3);
     }
 
-    // === Persistence ===
+    // === Persistence (own file: abuse-detection.yml) ===
 
-    public void save(YamlConfiguration c) {
-        c.set("abuse-detection.total-bonus-claims", totalBonusClaims);
-        c.set("abuse-detection.total-flagged", totalFlaggedPlayers);
-        c.set("abuse-detection.total-blocked", totalBlockedBonuses);
+    public void save() {
+        try {
+            YamlConfiguration c = new YamlConfiguration();
+            c.set("total-bonus-claims", totalBonusClaims);
+            c.set("total-flagged", totalFlaggedPlayers);
+            c.set("total-blocked", totalBlockedBonuses);
 
-        int i = 0;
-        for (Map.Entry<UUID, PlayerAbuseProfile> entry : profiles.entrySet()) {
-            if (i >= 200) break; // Save top 200
-            PlayerAbuseProfile p = entry.getValue();
-            if (p.totalSessions < 2 && !p.flagged) continue; // Skip trivial entries
-            String key = "abuse-detection.players." + entry.getKey().toString();
-            c.set(key + ".sessions", p.totalSessions);
-            c.set(key + ".bonuses", p.bonusClaims);
-            c.set(key + ".min-bet-bonuses", p.minBetBonusCount);
-            c.set(key + ".first-seen", p.firstSeen);
-            c.set(key + ".flagged", p.flagged);
-            c.set(key + ".flag-reason", p.flagReason);
-            i++;
+            int i = 0;
+            for (Map.Entry<UUID, PlayerAbuseProfile> entry : profiles.entrySet()) {
+                if (i >= 200) break;
+                PlayerAbuseProfile p = entry.getValue();
+                if (p.totalSessions < 2 && !p.flagged) continue;
+                String key = "players." + entry.getKey().toString();
+                c.set(key + ".sessions", p.totalSessions);
+                c.set(key + ".bonuses", p.bonusClaims);
+                c.set(key + ".min-bet-bonuses", p.minBetBonusCount);
+                c.set(key + ".first-seen", p.firstSeen);
+                c.set(key + ".flagged", p.flagged);
+                c.set(key + ".flag-reason", p.flagReason);
+                i++;
+            }
+            c.save(abuseFile);
+        } catch (Exception e) {
+            plugin.getLogger().warning("[AI] Failed to save abuse-detection.yml: " + e.getMessage());
         }
     }
 
-    public void load(YamlConfiguration c) {
-        totalBonusClaims = c.getInt("abuse-detection.total-bonus-claims", 0);
-        totalFlaggedPlayers = c.getInt("abuse-detection.total-flagged", 0);
-        totalBlockedBonuses = c.getInt("abuse-detection.total-blocked", 0);
+    public void load() {
+        if (!abuseFile.exists()) return;
+        try {
+            YamlConfiguration c = YamlConfiguration.loadConfiguration(abuseFile);
+            totalBonusClaims = c.getInt("total-bonus-claims", 0);
+            totalFlaggedPlayers = c.getInt("total-flagged", 0);
+            totalBlockedBonuses = c.getInt("total-blocked", 0);
 
-        if (c.getConfigurationSection("abuse-detection.players") != null) {
-            for (String uuidStr : c.getConfigurationSection("abuse-detection.players").getKeys(false)) {
-                try {
-                    UUID uuid = UUID.fromString(uuidStr);
-                    String key = "abuse-detection.players." + uuidStr;
-                    PlayerAbuseProfile p = new PlayerAbuseProfile();
-                    p.totalSessions = c.getInt(key + ".sessions", 0);
-                    p.bonusClaims = c.getInt(key + ".bonuses", 0);
-                    p.minBetBonusCount = c.getInt(key + ".min-bet-bonuses", 0);
-                    p.firstSeen = c.getLong(key + ".first-seen", 0);
-                    p.flagged = c.getBoolean(key + ".flagged", false);
-                    p.flagReason = c.getString(key + ".flag-reason", "");
-                    profiles.put(uuid, p);
-                } catch (Exception ignored) {}
+            if (c.getConfigurationSection("players") != null) {
+                for (String uuidStr : c.getConfigurationSection("players").getKeys(false)) {
+                    try {
+                        UUID uuid = UUID.fromString(uuidStr);
+                        String key = "players." + uuidStr;
+                        PlayerAbuseProfile p = new PlayerAbuseProfile();
+                        p.totalSessions = c.getInt(key + ".sessions", 0);
+                        p.bonusClaims = c.getInt(key + ".bonuses", 0);
+                        p.minBetBonusCount = c.getInt(key + ".min-bet-bonuses", 0);
+                        p.firstSeen = c.getLong(key + ".first-seen", 0);
+                        p.flagged = c.getBoolean(key + ".flagged", false);
+                        p.flagReason = c.getString(key + ".flag-reason", "");
+                        profiles.put(uuid, p);
+                    } catch (Exception ignored) {}
+                }
             }
+        } catch (Exception e) {
+            plugin.getLogger().warning("[AI] Failed to load abuse-detection.yml: " + e.getMessage());
         }
     }
 
