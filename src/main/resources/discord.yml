@@ -1,0 +1,4 @@
+# Discord Webhook Configuration
+# Set enabled to true and fill in your webhook URL to enable Discord notifications
+enabled: false
+url: ''

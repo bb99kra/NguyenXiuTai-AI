@@ -1,0 +1,25 @@
+name: NguyenXiuTai
+version: 1.2.0
+main: nguyenxiutai.NguyenXiuTaiPlugin
+api-version: 1.20
+softdepend:
+  - Vault
+  - PlaceholderAPI
+description: Tai Xiu gambling game plugin
+commands:
+  tai:
+    description: Dat cuoc Tai
+    usage: /tai <so tien>
+  xiu:
+    description: Dat cuoc Xiu
+    usage: /xiu <so tien>
+  taixiu:
+    description: Mo giao dien Tai Xiu
+    usage: /taixiu [reload]
+  cau:
+    description: Xem cau Tai Xiu
+    usage: /cau
+permissions:
+  nguyenxiutai.admin:
+    description: Admin permission
+    default: op
