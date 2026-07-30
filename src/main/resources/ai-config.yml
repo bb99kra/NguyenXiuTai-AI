@@ -52,3 +52,20 @@ economy:
   smart-bonus-enabled: true
   loss-streak-for-bonus: 5
   bonus-amount: 50000
+  player-daily-loss-limit: -500000
+
+# === NHÓM 5: Economy Tracker (M2) ===
+economy-tracker:
+  inflation-threshold: 0.15    # 15% M2 growth/day = inflation alert
+  deflation-threshold: -0.10   # -10% M2 growth/day = deflation alert
+  min-sessions: 10             # Cần 10 phiên để tính trend
+  edge-smoothing: 0.3          # Smoothing factor (0-1)
+
+# === NHÓM 6: Anti-Farming Detection ===
+abuse-detection:
+  bonus-ratio-threshold: 0.4   # Flag nếu >40% sessions nhận bonus
+  min-sessions: 5              # Cần 5+ sessions trước khi flag
+  new-account-ms: 3600000      # Account < 1 giờ = suspicious
+  min-bet-farming-count: 3     # 3+ lần cược tối thiểu liên tiếp
+  auto-block: false            # true = auto block, false = flag only
+  ip-cluster-threshold: 3      # 3+ accounts cùng IP

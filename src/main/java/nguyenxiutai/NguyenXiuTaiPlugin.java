@@ -1,12 +1,15 @@
 package nguyenxiutai;
 
+import java.io.File;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import nguyenxiutai.ai.AbuseDetector;
 import nguyenxiutai.ai.AICommand;
 import nguyenxiutai.ai.AIConfig;
 import nguyenxiutai.ai.AIDataManager;
 import nguyenxiutai.ai.AIEngine;
+import nguyenxiutai.ai.EconomyTracker;
 import nguyenxiutai.ai.HeatMapGUI;
 import nguyenxiutai.ai.SmartBot;
 import nguyenxiutai.command.CauCommand;
@@ -53,6 +56,8 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
     private AIEngine aiEngine;
     private SmartBot smartBot;
     private HeatMapGUI heatMapGUI;
+    private EconomyTracker economyTracker;
+    private AbuseDetector abuseDetector;
 
     @Override
     public void onEnable() {
@@ -101,15 +106,32 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
 
         this.heatMapGUI = new HeatMapGUI(this.aiEngine);
 
+        // === NEW: Economy-wide tracker + Abuse detector ===
+        this.economyTracker = new EconomyTracker(this, this.aiConfig);
+        this.abuseDetector = new AbuseDetector(this, this.aiConfig);
+
+        // Load saved data for new modules
+        try {
+            File aiDataFile = new File(this.getDataFolder(), "ai-data.yml");
+            if (aiDataFile.exists()) {
+                org.bukkit.configuration.file.YamlConfiguration aiData =
+                    org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
+                this.economyTracker.load(aiData);
+                this.abuseDetector.load(aiData);
+            }
+        } catch (Exception e) {
+            this.getLogger().warning("[AI] Failed to load economy/abuse data: " + e.getMessage());
+        }
+
         // === Game Manager with AI ===
         this.gameManager = new GameManager(this, eco, this.bossBarManager, discord, msgManager, this.statsManager);
-        this.gameManager.setAI(this.aiEngine, this.smartBot, this.aiDataManager);
+        this.gameManager.setAI(this.aiEngine, this.smartBot, this.aiDataManager, this.economyTracker, this.abuseDetector);
 
         this.gameManager.loadConfig();
 
         // === FIX #1: Single command executor with router ===
         TaiXiuCommand taiXiuCmd = new TaiXiuCommand(this.gameManager, this);
-        AICommand aiCmd = new AICommand(this.aiEngine, this.smartBot);
+        AICommand aiCmd = new AICommand(this.aiEngine, this.smartBot, this.economyTracker, this.abuseDetector);
         taiXiuCmd.setAICommand(aiCmd);
 
         this.getCommand("tai").setExecutor(new TaiCommand(this.gameManager));
@@ -157,12 +179,25 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         if (this.aiDataManager != null) {
             this.aiDataManager.save();
         }
+        // Save economy tracker and abuse detector data
+        try {
+            File aiDataFile = new File(this.getDataFolder(), "ai-data.yml");
+            org.bukkit.configuration.file.YamlConfiguration aiData =
+                org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
+            if (this.economyTracker != null) this.economyTracker.save(aiData);
+            if (this.abuseDetector != null) this.abuseDetector.save(aiData);
+            aiData.save(aiDataFile);
+        } catch (Exception e) {
+            this.getLogger().warning("[AI] Failed to save economy/abuse data: " + e.getMessage());
+        }
     }
 
     // === Getters for AI ===
     public AIEngine getAiEngine() { return aiEngine; }
     public SmartBot getSmartBot() { return smartBot; }
     public HeatMapGUI getHeatMapGUI() { return heatMapGUI; }
+    public EconomyTracker getEconomyTracker() { return economyTracker; }
+    public AbuseDetector getAbuseDetector() { return abuseDetector; }
 
     // === Original Event Handlers ===
 
@@ -170,6 +205,13 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         if (this.gameManager.getCurrentSession() != null && !this.gameManager.getCurrentSession().isFinished()) {
             this.bossBarManager.addPlayer(e.getPlayer());
+        }
+        // Track IP for abuse detection
+        if (this.abuseDetector != null && e.getPlayer().getAddress() != null) {
+            this.abuseDetector.trackPlayerIp(
+                e.getPlayer().getUniqueId(),
+                e.getPlayer().getAddress().getAddress().getHostAddress()
+            );
         }
     }
 

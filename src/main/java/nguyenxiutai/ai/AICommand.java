@@ -17,10 +17,16 @@ public class AICommand {
     private final AIEngine engine;
     private final SmartBot botSystem;
     private final DecimalFormat df = new DecimalFormat("#,###");
+    private final nguyenxiutai.ai.EconomyTracker economyTracker;
+    private final nguyenxiutai.ai.AbuseDetector abuseDetector;
 
-    public AICommand(AIEngine engine, SmartBot botSystem) {
+    public AICommand(AIEngine engine, SmartBot botSystem,
+                     nguyenxiutai.ai.EconomyTracker economyTracker,
+                     nguyenxiutai.ai.AbuseDetector abuseDetector) {
         this.engine = engine;
         this.botSystem = botSystem;
+        this.economyTracker = economyTracker;
+        this.abuseDetector = abuseDetector;
     }
 
     /**
@@ -80,6 +86,13 @@ public class AICommand {
                 reloadConfig();
                 sender.sendMessage("§a✅ Đã reload AI config!");
                 break;
+            case "tracker":
+            case "inflation":
+                showEconomyTracker(sender);
+                break;
+            case "abuse":
+                showAbuseReport(sender, args);
+                break;
             default:
                 showHelp(sender);
         }
@@ -104,7 +117,8 @@ public class AICommand {
         sender.sendMessage("§a/taixiu ai economy §7- Xem kinh tế server");
         sender.sendMessage("§a/taixiu ai bots §7- Xem danh sách bot");
         sender.sendMessage("§a/taixiu ai reload §7- Reload config AI");
-        sender.sendMessage("§a/taixiu ai heatmap §7- Xem heatmap");
+        sender.sendMessage("§a/taixiu ai tracker §7- Kinh tế toàn server (M2)");
+        sender.sendMessage("§a/taixiu ai abuse §7- Báo cáo anti-farming");
         sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
@@ -227,6 +241,54 @@ public class AICommand {
             sender.sendMessage("§7• §f" + name);
         }
         sender.sendMessage("§7Tổng: §f" + botSystem.getBotCount() + " bots");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+
+    private void showEconomyTracker(CommandSender sender) {
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  📈 Economy Tracker (M2)");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        if (economyTracker != null) {
+            sender.sendMessage("§7" + economyTracker.getStatusSummary());
+        } else {
+            sender.sendMessage("§cEconomy tracker not available");
+        }
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+
+    private void showAbuseReport(CommandSender sender, String[] args) {
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  🛡️ Anti-Farming Report");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        if (abuseDetector == null) {
+            sender.sendMessage("§cAbuse detector not available");
+            sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            return;
+        }
+        sender.sendMessage("§7" + abuseDetector.getStatusSummary());
+
+        // Show flagged players
+        java.util.List<AbuseDetector.FlaggedPlayer> flagged = abuseDetector.getFlaggedPlayers();
+        if (flagged.isEmpty()) {
+            sender.sendMessage("§a✅ Không phát hiện hành vi bất thường");
+        } else {
+            sender.sendMessage("§c⚠ Flagged players:");
+            for (AbuseDetector.FlaggedPlayer fp : flagged) {
+                String name = Bukkit.getOfflinePlayer(fp.uuid).getName();
+                if (name == null) name = fp.uuid.toString().substring(0, 8);
+                sender.sendMessage(String.format("§c• %s §7- %d sessions, %d bonuses (%.0f%%) - %s",
+                    name, fp.sessions, fp.bonusClaims, fp.bonusRatio * 100, fp.reason));
+            }
+        }
+
+        // If specific player requested
+        if (args.length >= 3) {
+            org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+            if (target != null) {
+                sender.sendMessage("§e§l  👤 Detail: " + (target.getName() != null ? target.getName() : args[2]));
+                sender.sendMessage("§7" + abuseDetector.getPlayerReport(target.getUniqueId()));
+            }
+        }
         sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 }

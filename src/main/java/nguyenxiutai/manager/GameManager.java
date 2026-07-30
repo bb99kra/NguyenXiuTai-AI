@@ -17,6 +17,8 @@ import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import nguyenxiutai.ai.AIDataManager;
 import nguyenxiutai.ai.AIEngine;
+import nguyenxiutai.ai.AbuseDetector;
+import nguyenxiutai.ai.EconomyTracker;
 import nguyenxiutai.ai.SmartBot;
 import nguyenxiutai.gui.PersonalHistory;
 import nguyenxiutai.model.GameSession;
@@ -62,6 +64,8 @@ public class GameManager {
     private AIEngine aiEngine;
     private SmartBot smartBot;
     private AIDataManager aiDataManager;
+    private EconomyTracker economyTracker;
+    private AbuseDetector abuseDetector;
 
     // FIX #3: Track which players already received bonus this session
     private final Set<UUID> bonusGivenThisSession = new HashSet<>();
@@ -75,10 +79,13 @@ public class GameManager {
         this.statsManager = statsManager;
     }
 
-    public void setAI(AIEngine aiEngine, SmartBot smartBot, AIDataManager aiDataManager) {
+    public void setAI(AIEngine aiEngine, SmartBot smartBot, AIDataManager aiDataManager,
+                       nguyenxiutai.ai.EconomyTracker economyTracker, nguyenxiutai.ai.AbuseDetector abuseDetector) {
         this.aiEngine = aiEngine;
         this.smartBot = smartBot;
         this.aiDataManager = aiDataManager;
+        this.economyTracker = economyTracker;
+        this.abuseDetector = abuseDetector;
     }
 
     public void loadConfig() {
@@ -186,6 +193,17 @@ public class GameManager {
                 if (GameManager.this.aiDataManager != null) {
                     GameManager.this.aiDataManager.save();
                 }
+                // Save economy tracker + abuse detector
+                try {
+                    File aiDataFile = new File(GameManager.this.plugin.getDataFolder(), "ai-data.yml");
+                    org.bukkit.configuration.file.YamlConfiguration aiData =
+                        org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(aiDataFile);
+                    if (GameManager.this.economyTracker != null) GameManager.this.economyTracker.save(aiData);
+                    if (GameManager.this.abuseDetector != null) GameManager.this.abuseDetector.save(aiData);
+                    aiData.save(aiDataFile);
+                } catch (Exception ex) {
+                    GameManager.this.plugin.getLogger().fine("[AI] Failed to save tracker data");
+                }
             }
         }.runTaskTimer(this.plugin, intervalSeconds * 20L, intervalSeconds * 20L);
     }
@@ -200,8 +218,13 @@ public class GameManager {
         // === AI: Update dynamic values each session ===
         if (aiEngine != null && aiEngine.getConfig().isEnabled()) {
             this.houseEdge = aiEngine.calculateHouseEdge(this.huAmount);
-            // FIX: Don't override config maxBet with AI ceiling
-            // AI maxBet is per-player, applied in placeBet()
+
+            // === NEW: M2-based house-edge adjustment ===
+            if (economyTracker != null) {
+                economyTracker.takeSnapshot(this.huAmount);
+                double m2Adj = economyTracker.getM2EdgeAdjustment();
+                this.houseEdge = Math.max(0, Math.min(0.5, this.houseEdge + m2Adj));
+            }
         }
 
         // === FIX #2: Bot bets are decorative only, tracked separately ===
@@ -406,6 +429,16 @@ public class GameManager {
                         && !bonusGivenThisSession.contains(uuid)
                         && aiEngine.shouldGiveBonusOnce(uuid)) {
                     long bonus = aiEngine.getSmartBonusAmount();
+                    // NEW: Abuse detection — check if this bonus claim is suspicious
+                    long betAmt = this.session.getPlayerSide(uuid) == 0
+                        ? this.session.getTaiBet(uuid)
+                        : this.session.getXiuBet(uuid);
+                    boolean allowed = abuseDetector == null ||
+                        abuseDetector.recordAndCheckBonusClaim(uuid, betAmt, this.minBet);
+                    if (!allowed) {
+                        p.sendMessage("§7[AI] Bonus tạm thời bị giới hạn.");
+                        continue;
+                    }
                     boolean bonusOk = this.eco.deposit(uuid, bonus);
                     if (bonusOk) {
                         bonusGivenThisSession.add(uuid);
@@ -432,6 +465,10 @@ public class GameManager {
 
         if (aiEngine != null && aiEngine.shouldInjectFund(this.huAmount)) {
             long inject = aiEngine.getInjectAmount();
+            // NEW: Use predictive injection if available
+            if (economyTracker != null) {
+                inject = economyTracker.getPredictiveInjection(this.huAmount, inject);
+            }
             this.huAmount += inject;
             this.plugin.getLogger().info("[AI] Auto-injected " + inject + " to fund. New fund: " + this.huAmount);
         }
@@ -555,6 +592,10 @@ public class GameManager {
             }
             this.statsManager.get(uuid).addWagered(amount);
             this.statsManager.get(uuid).setLastSide(isTai ? "tai" : "xiu");
+            // NEW: Track session for abuse detection
+            if (abuseDetector != null) {
+                abuseDetector.recordSession(uuid, amount, this.minBet);
+            }
             DecimalFormat df = this.curFmt.get();
             if (isTai) {
                 this.session.addTaiBet(uuid, amount);

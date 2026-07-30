@@ -113,6 +113,7 @@ public class AIConfig {
         smartBonusEnabled = c.getBoolean("economy.smart-bonus-enabled", true);
         lossStreakForBonus = c.getInt("economy.loss-streak-for-bonus", 5);
         bonusAmount = c.getLong("economy.bonus-amount", 50000);
+        playerDailyLossLimit = c.getLong("economy.player-daily-loss-limit", -500000);
     }
 
     private void saveDefault(JavaPlugin plugin, File file) {
