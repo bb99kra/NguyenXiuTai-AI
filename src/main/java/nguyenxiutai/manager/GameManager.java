@@ -1,9 +1,13 @@
 package nguyenxiutai.manager;
 
 import java.io.File;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -42,7 +46,7 @@ public class GameManager {
     private long huAmount;
     private long initHu;
     private long minBet;
-    private long maxBet;
+    private long maxBet; // base max bet from config
     private long jpAmount;
     private String cur;
     private boolean balancedPayout;
@@ -59,6 +63,9 @@ public class GameManager {
     private SmartBot smartBot;
     private AIDataManager aiDataManager;
 
+    // FIX #3: Track which players already received bonus this session
+    private final Set<UUID> bonusGivenThisSession = new HashSet<>();
+
     public GameManager(JavaPlugin plugin, EconomyManager eco, BossBarManager boss, DiscordManager discord, MessageManager msgManager, StatsManager statsManager) {
         this.plugin = plugin;
         this.eco = eco;
@@ -68,9 +75,6 @@ public class GameManager {
         this.statsManager = statsManager;
     }
 
-    /**
-     * Set AI components (called from plugin onEnable)
-     */
     public void setAI(AIEngine aiEngine, SmartBot smartBot, AIDataManager aiDataManager) {
         this.aiEngine = aiEngine;
         this.smartBot = smartBot;
@@ -104,18 +108,19 @@ public class GameManager {
             }
         }
         YamlConfiguration c = YamlConfiguration.loadConfiguration(configFile);
-        this.betTime = c.getInt("thoi-gian-dat-cuoc", 45);
-        this.rollTime = c.getInt("thoi-gian-quay", 5);
-        this.initHu = c.getLong("so-tien-ban-dau-hu", 500000L);
-        this.minBet = c.getLong("cuoc-toi-thieu", 1000L);
-        this.maxBet = c.getLong("cuoc-toi-da", 10000000L);
-        this.jpChance = c.getInt("ti-le-no-hu", 100);
-        this.jpAmount = c.getLong("so-tien-no-hu", 5000000L);
+        this.betTime = Math.max(5, c.getInt("thoi-gian-dat-cuoc", 45));
+        this.rollTime = Math.max(1, c.getInt("thoi-gian-quay", 5));
+        this.initHu = Math.max(0, c.getLong("so-tien-ban-dau-hu", 500000L));
+        this.minBet = Math.max(1, c.getLong("cuoc-toi-thieu", 1000L));
+        this.maxBet = Math.max(this.minBet, c.getLong("cuoc-toi-da", 10000000L));
+        this.jpChance = Math.max(1, c.getInt("ti-le-no-hu", 100));
+        this.jpAmount = Math.max(0, c.getLong("so-tien-no-hu", 5000000L));
         this.cur = c.getString("tien-te", "đ");
         String f = c.getString("format-tien", "#,###");
         try { this.curFmt.remove(); } catch (Exception e) {}
         this.balancedPayout = c.getBoolean("can-bang-payout", true);
-        this.houseEdge = c.getDouble("house-edge", 5.0) / 100.0;
+        double he = c.getDouble("house-edge", 5.0);
+        this.houseEdge = Math.max(0, Math.min(he / 100.0, 0.5));
         this.huAmount = c.getLong("current-hu", this.initHu);
         this.sessionCounter = c.getInt("current-session", 0);
 
@@ -178,7 +183,6 @@ public class GameManager {
                     GameManager.this.statsManager.save();
                     GameManager.this.savePersistentData();
                 }
-                // Save AI data periodically
                 if (GameManager.this.aiDataManager != null) {
                     GameManager.this.aiDataManager.save();
                 }
@@ -191,27 +195,27 @@ public class GameManager {
         this.session = new GameSession(this.sessionCounter, this.huAmount);
         this.rolling = false;
         this.timeLeft = this.betTime;
+        this.bonusGivenThisSession.clear(); // FIX #3: Reset bonus tracking
 
         // === AI: Update dynamic values each session ===
         if (aiEngine != null && aiEngine.getConfig().isEnabled()) {
-            // Update house edge based on fund
             this.houseEdge = aiEngine.calculateHouseEdge(this.huAmount);
-            // Update max bet (base, per-player adjustment happens in placeBet)
-            this.maxBet = aiEngine.getConfig().getMaxBetCeiling();
+            // FIX: Don't override config maxBet with AI ceiling
+            // AI maxBet is per-player, applied in placeBet()
         }
 
-        // === AI: Inject bots ===
+        // === FIX #2: Bot bets are decorative only, tracked separately ===
         if (smartBot != null && aiEngine != null && aiEngine.getConfig().isBotEnabled()) {
             List<SmartBot.BotBet> botBets = smartBot.generateBotBets(aiEngine);
             for (SmartBot.BotBet bet : botBets) {
                 if (bet.isTai) {
-                    this.session.addTaiBet(bet.uuid, bet.amount);
+                    this.session.addBotTaiBet(bet.uuid, bet.amount);
                 } else {
-                    this.session.addXiuBet(bet.uuid, bet.amount);
+                    this.session.addBotXiuBet(bet.uuid, bet.amount);
                 }
             }
             if (!botBets.isEmpty()) {
-                this.plugin.getLogger().info("[AI] " + botBets.size() + " bots placed bets this session");
+                this.plugin.getLogger().info("[AI] " + botBets.size() + " bots placed decorative bets this session");
             }
         }
 
@@ -224,7 +228,6 @@ public class GameManager {
             p.sendMessage(phienMsg);
         }
 
-        // === AI: Show streak alert if needed ===
         if (aiEngine != null && aiEngine.getConfig().isStreakDetectionEnabled()) {
             AIEngine.StreakInfo streak = aiEngine.getStreakInfo();
             if (streak.alert) {
@@ -287,7 +290,6 @@ public class GameManager {
     }
 
     private void rollDice() {
-        // === AI: Use AI engine for dice roll ===
         boolean isTai;
         if (aiEngine != null && aiEngine.getConfig().isEnabled() && aiEngine.getConfig().isDynamicRatioEnabled()) {
             isTai = aiEngine.rollDice();
@@ -296,7 +298,6 @@ public class GameManager {
             isTai = total >= 11;
         }
 
-        // Generate visual dice (must match result)
         int d1, d2, d3;
         do {
             d1 = rnd(); d2 = rnd(); d3 = rnd();
@@ -323,8 +324,13 @@ public class GameManager {
                     UUID u = top.getKey();
                     Player w = Bukkit.getPlayer(u);
                     jpName = w != null ? w.getName() : u.toString();
-                    this.eco.deposit(u, this.jpAmount);
-                    this.huAmount = this.initHu;
+                    // FIX #7: Check deposit success
+                    boolean jpOk = this.eco.deposit(u, this.jpAmount);
+                    if (jpOk) {
+                        this.huAmount = this.initHu;
+                    } else {
+                        this.plugin.getLogger().warning("[NguyenXiuTai] Jackpot deposit failed for " + jpName);
+                    }
                 }
             }
         }
@@ -332,27 +338,36 @@ public class GameManager {
         long taiTotal = this.session.getTaiTotal();
         long xiuTotal = this.session.getXiuTotal();
 
+        // FIX #2 + #15: Pay only real players; if no winners, losers' money goes to house fund
         if (isTai) {
             this.payWinners(this.session.getTaiBets(), this.session.getXiuBets());
         } else {
             this.payWinners(this.session.getXiuBets(), this.session.getTaiBets());
         }
 
+        // FIX #15: When winning side has no real players, losers' money goes to house fund
+        Map<UUID, Long> winnerBets = isTai ? this.session.getTaiBets() : this.session.getXiuBets();
+        Map<UUID, Long> loserBets = isTai ? this.session.getXiuBets() : this.session.getTaiBets();
+        if (winnerBets.isEmpty() && !loserBets.isEmpty()) {
+            long losersPot = loserBets.values().stream().mapToLong(Long::longValue).sum();
+            // Money was already withdrawn from losers, add to house fund
+            this.huAmount += losersPot;
+            this.plugin.getLogger().info("[NguyenXiuTai] No winners this round. " + losersPot + " added to house fund.");
+        }
+
         // === AI: Record data ===
         if (aiDataManager != null) {
             aiDataManager.recordResult(isTai, taiTotal, xiuTotal);
 
-            // Record player results
-            Map<UUID, Long> winnerBets = isTai ? this.session.getTaiBets() : this.session.getXiuBets();
-            Map<UUID, Long> loserBets = isTai ? this.session.getXiuBets() : this.session.getTaiBets();
+            Map<UUID, Long> winBets = isTai ? this.session.getTaiBets() : this.session.getXiuBets();
+            Map<UUID, Long> loseBets = isTai ? this.session.getXiuBets() : this.session.getTaiBets();
 
-            for (Map.Entry<UUID, Long> entry : winnerBets.entrySet()) {
-                // Skip bots
+            for (Map.Entry<UUID, Long> entry : winBets.entrySet()) {
                 if (smartBot != null && smartBot.isBot(entry.getKey())) continue;
-                long payout = calculatePayout(entry.getValue(), winnerBets, loserBets);
+                long payout = calculatePayout(entry.getValue(), winBets, loseBets);
                 aiDataManager.recordPlayerResult(entry.getKey(), true, entry.getValue(), payout);
             }
-            for (Map.Entry<UUID, Long> entry : loserBets.entrySet()) {
+            for (Map.Entry<UUID, Long> entry : loseBets.entrySet()) {
                 if (smartBot != null && smartBot.isBot(entry.getKey())) continue;
                 aiDataManager.recordPlayerResult(entry.getKey(), false, entry.getValue(), 0);
             }
@@ -377,17 +392,25 @@ public class GameManager {
         String msg = this.msgManager.getMsgKetQua().replace("{dice}", dice).replace("{total}", String.valueOf(total)).replace("{result}", resultStr);
         String payoutMsg = this.msgManager.getMsgPayoutInfo().replace("{multiplier}", multiplierStr).replace("{tai_total}", df.format(taiTotal) + this.cur).replace("{xiu_total}", df.format(xiuTotal) + this.cur);
 
+        // FIX #3: Only give bonus to real players who BET this session AND just hit the threshold
         for (Player p : Bukkit.getOnlinePlayers()) {
             p.sendMessage(msg);
             if (this.balancedPayout) p.sendMessage(payoutMsg);
             p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
 
-            // === AI: Smart bonus for losing streak players ===
             if (aiEngine != null && smartBot != null && !smartBot.isBot(p.getUniqueId())) {
-                if (aiEngine.shouldGiveBonus(p.getUniqueId())) {
+                UUID uuid = p.getUniqueId();
+                // FIX #3: Must have bet this session, not already received bonus, and just reached threshold
+                boolean betThisSession = (this.session.getPlayerSide(uuid) != -1);
+                if (betThisSession
+                        && !bonusGivenThisSession.contains(uuid)
+                        && aiEngine.shouldGiveBonusOnce(uuid)) {
                     long bonus = aiEngine.getSmartBonusAmount();
-                    this.eco.deposit(p.getUniqueId(), bonus);
-                    p.sendMessage("§d🎁 [AI] Bạn đang đen quá! Thưởng an ủi: §e" + df.format(bonus) + " " + this.cur);
+                    boolean bonusOk = this.eco.deposit(uuid, bonus);
+                    if (bonusOk) {
+                        bonusGivenThisSession.add(uuid);
+                        p.sendMessage("§d🎁 [AI] Bạn đang đen quá! Thưởng an ủi: §e" + df.format(bonus) + " " + this.cur);
+                    }
                 }
             }
         }
@@ -407,19 +430,16 @@ public class GameManager {
         this.savePersistentData();
         this.boss.removeAll();
 
-        // === AI: Auto-inject fund if needed ===
         if (aiEngine != null && aiEngine.shouldInjectFund(this.huAmount)) {
             long inject = aiEngine.getInjectAmount();
             this.huAmount += inject;
             this.plugin.getLogger().info("[AI] Auto-injected " + inject + " to fund. New fund: " + this.huAmount);
         }
 
-        // === AI: Economy alert ===
         if (aiEngine != null) {
             AIEngine.EconomyStatus ecoStatus = aiEngine.checkEconomy();
             if (ecoStatus.needsAction) {
                 this.plugin.getLogger().warning("[AI] Economy alert: " + ecoStatus.message);
-                this.plugin.getLogger().warning("[AI Economy Alert] " + ecoStatus.message);
             }
         }
 
@@ -430,9 +450,6 @@ public class GameManager {
         }.runTaskLater(this.plugin, 60L);
     }
 
-    /**
-     * Calculate payout for a winner (used for AI tracking)
-     */
     private long calculatePayout(long bet, Map<UUID, Long> winnerBets, Map<UUID, Long> loserBets) {
         long winnerTotal = winnerBets.values().stream().mapToLong(Long::longValue).sum();
         long loserTotal = loserBets.values().stream().mapToLong(Long::longValue).sum();
@@ -455,6 +472,9 @@ public class GameManager {
             UUID uuid = e.getKey();
             long bet = e.getValue();
 
+            // FIX #2: Skip bots - they don't get real payouts
+            if (smartBot != null && smartBot.isBot(uuid)) continue;
+
             if (this.balancedPayout && loserTotal > 0 && winnerTotal > 0) {
                 long netPot = (long)((double)loserTotal * (1.0 - this.houseEdge));
                 long share = (long)((double)bet / (double)winnerTotal * (double)netPot);
@@ -463,13 +483,15 @@ public class GameManager {
                 payout = bet * 2;
             }
 
+            // FIX #7: Check deposit result
             boolean ok = this.eco.deposit(uuid, payout);
+            if (!ok) {
+                this.plugin.getLogger().warning("[NguyenXiuTai] Failed to deposit payout " + payout + " to " + uuid);
+                continue;
+            }
+
             Player p = Bukkit.getPlayer(uuid);
-
-            // Skip bot messages
-            if (smartBot != null && smartBot.isBot(uuid)) continue;
-
-            if (p != null && ok) {
+            if (p != null) {
                 p.sendMessage(this.msgManager.getMsgThang().replace("{amount}", df.format(payout)).replace("{currency}", this.cur));
                 p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
             }
@@ -478,6 +500,7 @@ public class GameManager {
         }
     }
 
+    // FIX #4: Check cumulative bet amount, not just single bet
     public boolean placeBet(Player player, boolean isTai, long amount) {
         this.betLock.lock();
         try {
@@ -496,13 +519,31 @@ public class GameManager {
                 return false;
             }
 
-            // === AI: Dynamic max bet per player ===
+            // FIX #4: Check cumulative bet
+            long currentBet = 0;
+            if (isTai) {
+                currentBet = this.session.getTaiBet(uuid);
+            } else {
+                currentBet = this.session.getXiuBet(uuid);
+            }
+
             long playerMaxBet = this.maxBet;
             if (aiEngine != null && aiEngine.getConfig().isEnabled() && aiEngine.getConfig().isDynamicBetLimitEnabled()) {
                 playerMaxBet = aiEngine.calculateMaxBet(uuid, this.maxBet);
             }
 
-            if (amount < this.minBet || amount > playerMaxBet) {
+            if (currentBet + amount > playerMaxBet) {
+                DecimalFormat df = this.curFmt.get();
+                long remaining = playerMaxBet - currentBet;
+                if (remaining <= 0) {
+                    player.sendMessage("§cBạn đã cược tối đa bên " + (isTai ? "Tài" : "Xỉu") + " rồi! (Max: " + df.format(playerMaxBet) + ")");
+                } else {
+                    player.sendMessage("§cVượt quá giới hạn! Bạn đã cược " + df.format(currentBet) + ", còn có thể cược thêm " + df.format(remaining) + " (Max: " + df.format(playerMaxBet) + ")");
+                }
+                return false;
+            }
+
+            if (amount < this.minBet) {
                 DecimalFormat df = this.curFmt.get();
                 player.sendMessage(this.msgManager.getMsgLimit().replace("{min}", df.format(this.minBet)).replace("{max}", df.format(playerMaxBet)));
                 return false;
@@ -539,7 +580,6 @@ public class GameManager {
         this.boss.removeAll();
         this.statsManager.save();
         this.savePersistentData();
-        // Save AI data
         if (this.aiDataManager != null) this.aiDataManager.save();
     }
 
@@ -560,7 +600,11 @@ public class GameManager {
         for (Map.Entry<UUID, Long> e : bets.entrySet()) {
             UUID uuid = e.getKey();
             long amount = e.getValue();
+            // FIX #7: Check refund result
             boolean ok = this.eco.deposit(uuid, amount);
+            if (!ok) {
+                this.plugin.getLogger().warning("[NguyenXiuTai] Failed to refund " + amount + " to " + uuid);
+            }
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && ok) {
                 p.sendMessage(this.msgManager.getMsgHoanTien().replace("{amount}", df.format(amount)).replace("{currency}", this.cur));
@@ -572,15 +616,25 @@ public class GameManager {
         return ThreadLocalRandom.current().nextInt(1, 7);
     }
 
+    // FIX #16: parseAmount with proper decimal handling
     public static long parseAmount(String input) {
-        input = input.trim().toUpperCase().replace(",", "").replace(".", "");
+        if (input == null || input.isEmpty()) return -1;
+        input = input.trim().toUpperCase();
         double m = 1.0;
         if (input.endsWith("T")) { m = 1.0E12; input = input.substring(0, input.length() - 1); }
         else if (input.endsWith("B")) { m = 1.0E9; input = input.substring(0, input.length() - 1); }
         else if (input.endsWith("M")) { m = 1000000.0; input = input.substring(0, input.length() - 1); }
         else if (input.endsWith("K")) { m = 1000.0; input = input.substring(0, input.length() - 1); }
-        try { return (long)(Double.parseDouble(input) * m); }
-        catch (NumberFormatException e) { return -1; }
+        // Remove thousand separators but keep decimal point
+        input = input.replace(",", "");
+        try {
+            double val = Double.parseDouble(input.trim());
+            if (Double.isNaN(val) || Double.isInfinite(val)) return -1;
+            long result = BigDecimal.valueOf(val).multiply(BigDecimal.valueOf(m)).setScale(0, RoundingMode.HALF_UP).longValue();
+            return result > 0 ? result : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     public double getPayoutMultiplier(boolean isTai) {

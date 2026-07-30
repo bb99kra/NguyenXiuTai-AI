@@ -45,8 +45,13 @@ public class HeatMapGUI {
         gui.setItem(33, createRatioItem());
 
         // Row 5: Stats (slot 36-44)
-        gui.setItem(36, createStatItem("§aTài Count", engine.getDataManager().countTaiInLast(50), 50));
-        gui.setItem(37, createStatItem("§cXỉu Count", 50 - engine.getDataManager().countTaiInLast(50), 50));
+        // FIX: Use actual sample size, not hardcoded 50
+        int historySize = engine.getDataManager().getHistorySize();
+        int sampleSize = Math.min(50, historySize);
+        int taiCount = engine.getDataManager().countTaiInLast(sampleSize);
+        int xiuCount = sampleSize - taiCount;
+        gui.setItem(36, createStatItem("§aTài Count", taiCount, sampleSize));
+        gui.setItem(37, createStatItem("§cXỉu Count", xiuCount, sampleSize));
         gui.setItem(38, createInfoItem("§eHouse Edge", String.format("%.1f%%", engine.getCurrentHouseEdge() * 100)));
         gui.setItem(39, createInfoItem("§bTai Ratio", String.format("%.1f%%", engine.getCurrentTaiRatio() * 100)));
 

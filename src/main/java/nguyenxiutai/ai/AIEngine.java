@@ -2,11 +2,11 @@ package nguyenxiutai.ai;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * AI Engine - Brain of the system
- * Analyzes data and makes decisions for dynamic ratios, economy, etc.
  */
 public class AIEngine {
 
@@ -17,6 +17,9 @@ public class AIEngine {
     private double currentTaiRatio = 0.50;
     private double currentHouseEdge = 0.05;
     private long currentMaxBet = 10000000;
+
+    // FIX #3: Track bonus-given state per player (lossStreak when bonus was given)
+    private final Map<UUID, Integer> lastBonusLossStreak = new ConcurrentHashMap<>();
 
     public AIEngine(AIConfig config, AIDataManager dataManager) {
         this.config = config;
@@ -41,9 +44,10 @@ public class AIEngine {
     }
 
     /**
-     * Calculate Tai probability based on history
+     * FIX #13: Calculate Tai probability - single source of truth
+     * Used by both rollDice() and getPrediction()
      */
-    private double calculateTaiRatio() {
+    public double calculateTaiRatio() {
         int window = config.getAnalysisWindowSize();
         double baseRatio = config.getBaseRatio();
         double maxAdj = config.getMaxRatioAdjustment();
@@ -57,13 +61,11 @@ public class AIEngine {
         double taiRatio = dataManager.getTaiRatioInLast(window);
         double deviation = taiRatio - baseRatio;
 
-        // If Tai is running hot (>55%), reduce Tai probability
-        // If Tai is running cold (<45%), increase Tai probability
-        double adjustment = -deviation * 0.5; // Dampened correction
+        double adjustment = -deviation * 0.5;
         adjustment = Math.max(-maxAdj, Math.min(maxAdj, adjustment));
 
         currentTaiRatio = baseRatio + adjustment;
-        currentTaiRatio = Math.max(0.35, Math.min(0.65, currentTaiRatio)); // Safety bounds
+        currentTaiRatio = Math.max(0.35, Math.min(0.65, currentTaiRatio));
 
         return currentTaiRatio;
     }
@@ -81,14 +83,17 @@ public class AIEngine {
         long lowThreshold = config.getQuỹThresholdLow();
         long highThreshold = config.getQuỹThresholdHigh();
 
+        if (highThreshold <= lowThreshold) {
+            // FIX: Prevent division by zero
+            currentHouseEdge = minEdge;
+            return currentHouseEdge;
+        }
+
         if (fundAmount <= lowThreshold) {
-            // Fund is low - increase house edge to protect
             currentHouseEdge = maxEdge;
         } else if (fundAmount >= highThreshold) {
-            // Fund is high - decrease house edge (let players win more)
             currentHouseEdge = minEdge;
         } else {
-            // Linear interpolation between thresholds
             double ratio = (double)(fundAmount - lowThreshold) / (highThreshold - lowThreshold);
             currentHouseEdge = maxEdge - ratio * (maxEdge - minEdge);
         }
@@ -98,6 +103,7 @@ public class AIEngine {
 
     /**
      * Calculate dynamic max bet for a player
+     * FIX: Uses baseMaxBet from config, not overridden ceiling
      */
     public long calculateMaxBet(UUID uuid, long baseMaxBet) {
         if (!config.isEnabled() || !config.isDynamicBetLimitEnabled()) {
@@ -112,15 +118,15 @@ public class AIEngine {
         // If player is on win streak, reduce their max bet
         if (pd.isOnWinStreak(streakThreshold)) {
             double reduction = 1.0 - (pd.currentWinStreak - streakThreshold + 1) * 0.15;
-            reduction = Math.max(0.3, reduction); // At least 30% of base
+            reduction = Math.max(0.3, reduction);
             long adjusted = (long)(baseMaxBet * reduction);
             return Math.max(floor, Math.min(ceiling, adjusted));
         }
 
-        // If player is on loss streak, slightly increase their max bet (encourage play)
+        // If player is on loss streak, slightly increase their max bet
         if (pd.isOnLossStreak(streakThreshold)) {
             double increase = 1.0 + (pd.currentLossStreak - streakThreshold + 1) * 0.1;
-            increase = Math.min(1.5, increase); // Max 150% of base
+            increase = Math.min(1.5, increase);
             long adjusted = (long)(baseMaxBet * increase);
             return Math.max(floor, Math.min(ceiling, adjusted));
         }
@@ -132,9 +138,6 @@ public class AIEngine {
     // GROUP 2: ANALYTICS
     // =====================================================
 
-    /**
-     * Get streak analysis
-     */
     public StreakInfo getStreakInfo() {
         int streak = dataManager.getCurrentStreak();
         boolean side = dataManager.getStreakSide();
@@ -143,40 +146,35 @@ public class AIEngine {
     }
 
     /**
-     * Get prediction for next session
+     * FIX #13: Prediction now uses the SAME calculateTaiRatio() as rollDice()
      */
     public Prediction getPrediction() {
         if (!config.isEnabled() || !config.isPredictionEnabled()) {
             return new Prediction(0.5, 0.5, "Disabled");
         }
 
-        int lookback = config.getPredictionLookback();
-        double taiRatio = dataManager.getTaiRatioInLast(lookback);
+        // Use the same probability as rollDice
+        double taiProb = calculateTaiRatio();
+        double xiuProb = 1.0 - taiProb;
+
         int streak = dataManager.getCurrentStreak();
         boolean streakSide = dataManager.getStreakSide();
 
-        // Base prediction from history
-        double taiProb = taiRatio;
-        double xiuProb = 1.0 - taiRatio;
-
-        // Streak correction: if streak is long, predict reversal
+        // Streak correction for display (visual hint, doesn't affect roll)
         if (streak >= 5) {
             double reversalBoost = Math.min(0.15, (streak - 4) * 0.03);
             if (streakSide) {
-                // Tai streak -> predict Xiu more
                 xiuProb += reversalBoost;
                 taiProb -= reversalBoost;
             } else {
-                // Xiu streak -> predict Tai more
                 taiProb += reversalBoost;
                 xiuProb -= reversalBoost;
             }
+            // Normalize
+            double total = taiProb + xiuProb;
+            taiProb /= total;
+            xiuProb /= total;
         }
-
-        // Normalize
-        double total = taiProb + xiuProb;
-        taiProb /= total;
-        xiuProb /= total;
 
         String analysis = String.format("Tai: %.0f%% | Xiu: %.0f%% | Streak: %s %d",
             taiProb * 100, xiuProb * 100, streakSide ? "Tài" : "Xỉu", streak);
@@ -184,9 +182,6 @@ public class AIEngine {
         return new Prediction(taiProb, xiuProb, analysis);
     }
 
-    /**
-     * Get player analysis
-     */
     public PlayerAnalysis getPlayerAnalysis(UUID uuid) {
         AIDataManager.PlayerData pd = dataManager.getPlayerData(uuid);
         if (pd.totalSessions < config.getPlayerAnalysisMinSessions()) {
@@ -212,9 +207,6 @@ public class AIEngine {
     // GROUP 4: ECONOMY
     // =====================================================
 
-    /**
-     * Check if economy needs protection
-     */
     public EconomyStatus checkEconomy() {
         if (!config.isEnabled() || !config.isEconomyProtectionEnabled()) {
             return new EconomyStatus(false, "Disabled", 0, 0);
@@ -236,34 +228,46 @@ public class AIEngine {
         return new EconomyStatus(needsAction, message, profit, ds.totalSessions);
     }
 
-    /**
-     * Check if auto-inject is needed
-     */
     public boolean shouldInjectFund(long currentFund) {
         return config.isEnabled() &&
                config.isEconomyProtectionEnabled() &&
                currentFund < config.getAutoInjectThreshold();
     }
 
-    /**
-     * Get auto-inject amount
-     */
     public long getInjectAmount() {
         return config.getAutoInjectAmount();
     }
 
     /**
-     * Check if player deserves a smart bonus
+     * FIX #3: Only give bonus when loss streak JUST hit the threshold
+     * Not repeatedly every session
      */
-    public boolean shouldGiveBonus(UUID uuid) {
+    public boolean shouldGiveBonusOnce(UUID uuid) {
         if (!config.isEnabled() || !config.isSmartBonusEnabled()) return false;
         AIDataManager.PlayerData pd = dataManager.getPlayerData(uuid);
-        return pd.isOnLossStreak(config.getLossStreakForBonus());
+        int threshold = config.getLossStreakForBonus();
+
+        // Must be exactly at threshold (or just passed it this session)
+        if (!pd.isOnLossStreak(threshold)) return false;
+
+        // Check if we already gave bonus at this streak level
+        Integer lastStreak = lastBonusLossStreak.get(uuid);
+        if (lastStreak != null && pd.currentLossStreak <= lastStreak) {
+            return false; // Already gave bonus at this or higher streak
+        }
+
+        // Mark as given
+        lastBonusLossStreak.put(uuid, pd.currentLossStreak);
+        return true;
     }
 
     /**
-     * Get bonus amount
+     * Reset bonus tracking for a player (called when they win)
      */
+    public void resetBonusTracking(UUID uuid) {
+        lastBonusLossStreak.remove(uuid);
+    }
+
     public long getSmartBonusAmount() {
         return config.getBonusAmount();
     }
@@ -288,7 +292,7 @@ public class AIEngine {
 
     public static class StreakInfo {
         public final int count;
-        public final boolean side; // true=Tai
+        public final boolean side;
         public final boolean alert;
 
         public StreakInfo(int count, boolean side, boolean alert) {

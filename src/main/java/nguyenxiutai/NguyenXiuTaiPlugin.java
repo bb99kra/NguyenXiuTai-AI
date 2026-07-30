@@ -26,17 +26,16 @@ import nguyenxiutai.manager.GameManager;
 import nguyenxiutai.manager.MessageManager;
 import nguyenxiutai.manager.StatsManager;
 import org.bukkit.Bukkit;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
@@ -66,6 +65,17 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
 
         EconomyManager eco = new EconomyManager();
 
+        // === FIX #7: Check Vault/economy before proceeding ===
+        if (!eco.setup()) {
+            this.getLogger().severe("========================================");
+            this.getLogger().severe("Vault not found! No economy provider.");
+            this.getLogger().severe("This plugin requires Vault + an economy");
+            this.getLogger().severe("plugin (e.g. EssentialsX). Disabling...");
+            this.getLogger().severe("========================================");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
+        }
+
         this.bossBarManager = new BossBarManager(this);
         this.bossBarManager.setMessageManager(msgManager);
 
@@ -93,20 +103,17 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         this.gameManager = new GameManager(this, eco, this.bossBarManager, discord, msgManager, this.statsManager);
         this.gameManager.setAI(this.aiEngine, this.smartBot, this.aiDataManager);
 
-        if (!eco.setup()) {
-            this.getLogger().severe("Vault not found! Economy features disabled.");
-        }
-
         this.gameManager.loadConfig();
 
-        // === Commands ===
+        // === FIX #1: Single command executor with router ===
+        TaiXiuCommand taiXiuCmd = new TaiXiuCommand(this.gameManager, this);
+        AICommand aiCmd = new AICommand(this.aiEngine, this.smartBot);
+        taiXiuCmd.setAICommand(aiCmd);
+
         this.getCommand("tai").setExecutor(new TaiCommand(this.gameManager));
         this.getCommand("xiu").setExecutor(new XiuCommand(this.gameManager));
-        this.getCommand("taixiu").setExecutor(new TaiXiuCommand(this.gameManager, this));
+        this.getCommand("taixiu").setExecutor(taiXiuCmd);
         this.getCommand("cau").setExecutor(new CauCommand(this.gameManager));
-
-        // AI Command: /taixiu ai [subcommand]
-        this.getCommand("taixiu").setExecutor(new AICommand(this.aiEngine, this.smartBot));
 
         this.getServer().getPluginManager().registerEvents(this, this);
 
@@ -137,7 +144,7 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
             this.getLogger().info("§a[AI] - Economy Protection: " + this.aiConfig.isEconomyProtectionEnabled());
         }
 
-        this.getLogger().info("NguyenXiuTai v1.3.0 enabled! (AI Enhanced)");
+        this.getLogger().info("NguyenXiuTai v" + this.getDescription().getVersion() + " enabled! (AI Enhanced)");
     }
 
     @Override
@@ -168,6 +175,8 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
     public void onQuit(PlayerQuitEvent e) {
         this.bossBarManager.removePlayer(e.getPlayer().getUniqueId());
         this.waitingBet.remove(e.getPlayer().getUniqueId());
+        // FIX #4: Cleanup selected amount on quit
+        BetGUI.cleanupPlayer(e.getPlayer().getUniqueId());
     }
 
     @EventHandler
@@ -245,6 +254,17 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    // FIX #8: Cleanup selected amount when BetGUI is closed
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent e) {
+        if (e.getView().getTitle().equals("§6§lTài Xỉu - Chọn tiền")) {
+            if (e.getPlayer() instanceof Player) {
+                // Don't remove immediately - handleClick removes it when betting
+                // Only cleanup on quit (handled in onQuit)
+            }
+        }
+    }
+
     private void handleDailyBonus(Player p) {
         DailyBonusManager dbm = this.gameManager.getDailyBonusManager();
         if (dbm == null) {
@@ -258,7 +278,12 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         }
         long bonus = dbm.claim(p);
         if (bonus > 0) {
-            this.gameManager.getEconomyManager().deposit(p.getUniqueId(), bonus);
+            boolean ok = this.gameManager.getEconomyManager().deposit(p.getUniqueId(), bonus);
+            if (!ok) {
+                p.sendMessage("§cLỗi khi nhận thưởng! Thử lại sau.");
+                p.closeInventory();
+                return;
+            }
             String cur = this.gameManager.getCurrencySymbol();
             String formatted = this.gameManager.getCurrencyFormat().format(bonus);
             p.sendMessage("§a✅ Nhận thưởng hàng ngày: §e" + formatted + " " + cur);

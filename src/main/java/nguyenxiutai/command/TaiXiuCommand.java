@@ -1,15 +1,7 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.bukkit.command.Command
- *  org.bukkit.command.CommandExecutor
- *  org.bukkit.command.CommandSender
- *  org.bukkit.entity.Player
- *  org.bukkit.plugin.java.JavaPlugin
- */
 package nguyenxiutai.command;
 
+import java.text.DecimalFormat;
+import nguyenxiutai.ai.AICommand;
 import nguyenxiutai.gui.MainGUI;
 import nguyenxiutai.manager.GameManager;
 import org.bukkit.command.Command;
@@ -18,34 +10,70 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class TaiXiuCommand
-implements CommandExecutor {
+/**
+ * Unified /taixiu command router
+ * /taixiu              -> MainGUI
+ * /taixiu reload       -> reload config
+ * /taixiu ai <sub>     -> AI subcommands
+ */
+public class TaiXiuCommand implements CommandExecutor {
+
     private final GameManager gameManager;
     private final JavaPlugin plugin;
+    private AICommand aiCommand;
 
     public TaiXiuCommand(GameManager gameManager, JavaPlugin plugin) {
         this.gameManager = gameManager;
         this.plugin = plugin;
     }
 
+    public void setAICommand(AICommand aiCommand) {
+        this.aiCommand = aiCommand;
+    }
+
+    @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+        // /taixiu -> open MainGUI
+        if (args.length == 0) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cChỉ người chơi mới dùng được lệnh này!");
+                return true;
+            }
+            MainGUI.open((Player) sender, this.gameManager);
+            return true;
+        }
+
+        // /taixiu reload
+        if (args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("nguyenxiutai.admin")) {
-                sender.sendMessage("\u00a7cB\u1ea1n kh\u00f4ng c\u00f3 quy\u1ec1n!");
+                sender.sendMessage("§cBạn không có quyền!");
                 return true;
             }
             this.gameManager.loadConfig();
-            sender.sendMessage("\u00a7aNguyenXiuTai - Reload th\u00e0nh c\u00f4ng!");
+            // Reload AI config too
+            if (this.aiCommand != null) {
+                this.aiCommand.reloadConfig();
+            }
+            sender.sendMessage("§aNguyenXiuTai - Reload thành công!");
             this.plugin.getLogger().info("[NguyenXiuTai] Reloaded by " + sender.getName());
             return true;
         }
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("Ch\u1ec9 ng\u01b0\u1eddi ch\u01a1i m\u1edbi d\u00f9ng l\u1ec7nh n\u00e0y!");
+
+        // /taixiu ai <subcommand> ... -> delegate to AICommand
+        if (args[0].equalsIgnoreCase("ai")) {
+            if (this.aiCommand != null) {
+                return this.aiCommand.handleCommand(sender, args);
+            }
+            sender.sendMessage("§cAI chưa được khởi tạo!");
             return true;
         }
-        Player p = (Player)sender;
-        MainGUI.open(p, this.gameManager);
+
+        // Unknown subcommand -> show help or GUI
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("§cUsage: /taixiu [reload|ai <subcommand>]");
+            return true;
+        }
+        MainGUI.open((Player) sender, this.gameManager);
         return true;
     }
 }
-

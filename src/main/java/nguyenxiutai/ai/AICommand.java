@@ -4,16 +4,15 @@ import java.text.DecimalFormat;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * AI Command - /taixiu ai [subcommand]
- * Shows AI analysis, predictions, streak info
+ * AI Command handler - delegated from TaiXiuCommand router
+ * /taixiu ai status|streak|predict|player|economy|bots|reload|heatmap
  */
-public class AICommand implements CommandExecutor {
+public class AICommand {
 
     private final AIEngine engine;
     private final SmartBot botSystem;
@@ -24,91 +23,107 @@ public class AICommand implements CommandExecutor {
         this.botSystem = botSystem;
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§cChỉ người chơi mới dùng được lệnh này!");
-            return true;
-        }
-
-        Player player = (Player) sender;
-
-        if (!player.hasPermission("nguyenxiutai.admin")) {
-            player.sendMessage("§cBạn không có quyền sử dụng lệnh này!");
-            return true;
-        }
+    /**
+     * Handle /taixiu ai <subcommand> ...
+     * Called from TaiXiuCommand router (args[0]="ai", args[1]=sub, ...)
+     */
+    public boolean handleCommand(CommandSender sender, String[] args) {
+        // Allow console for status, economy, reload, bots
+        boolean isPlayer = sender instanceof Player;
 
         if (args.length < 2) {
-            showHelp(player);
+            showHelp(sender);
+            return true;
+        }
+
+        // Admin check for all AI commands
+        if (!sender.hasPermission("nguyenxiutai.admin")) {
+            sender.sendMessage("§cBạn không có quyền sử dụng lệnh này!");
             return true;
         }
 
         String sub = args[1].toLowerCase();
         switch (sub) {
             case "status":
-                showStatus(player);
+                showStatus(sender);
                 break;
             case "streak":
-                showStreak(player);
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
+                showStreak((Player) sender);
                 break;
             case "predict":
-                showPrediction(player);
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
+                showPrediction((Player) sender);
                 break;
             case "player":
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
                 if (args.length >= 3) {
-                    showPlayerAnalysis(player, args[2]);
+                    showPlayerAnalysis((Player) sender, args[2]);
                 } else {
-                    showPlayerAnalysis(player, player.getName());
+                    showPlayerAnalysis((Player) sender, sender.getName());
                 }
                 break;
             case "economy":
-                showEconomy(player);
+                showEconomy(sender);
                 break;
             case "bots":
-                showBots(player);
+                showBots(sender);
                 break;
             case "reload":
-                engine.getConfig().load((org.bukkit.plugin.java.JavaPlugin) Bukkit.getPluginManager().getPlugin("NguyenXiuTai"));
-                player.sendMessage("§a✅ Đã reload AI config!");
+                reloadConfig();
+                sender.sendMessage("§a✅ Đã reload AI config!");
+                break;
+            case "heatmap":
+                if (!isPlayer) { sender.sendMessage("§cChỉ người chơi mới xem được!"); return true; }
+                // HeatMapGUI is accessed via plugin
+                sender.sendMessage("§eSử dụng: /cau để xem heatmap");
                 break;
             default:
-                showHelp(player);
+                showHelp(sender);
         }
         return true;
     }
 
-    private void showHelp(Player player) {
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§e§l  🤖 NguyenXiuTai AI Commands");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§a/taixiu ai status §7- Xem trạng thái AI");
-        player.sendMessage("§a/taixiu ai streak §7- Xem cầu hiện tại");
-        player.sendMessage("§a/taixiu ai predict §7- Dự đoán phiên sau");
-        player.sendMessage("§a/taixiu ai player [name] §7- Phân tích người chơi");
-        player.sendMessage("§a/taixiu ai economy §7- Xem kinh tế server");
-        player.sendMessage("§a/taixiu ai bots §7- Xem danh sách bot");
-        player.sendMessage("§a/taixiu ai reload §7- Reload config AI");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    public void reloadConfig() {
+        JavaPlugin plugin = (JavaPlugin) Bukkit.getPluginManager().getPlugin("NguyenXiuTai");
+        if (plugin != null) {
+            engine.getConfig().load(plugin);
+        }
     }
 
-    private void showStatus(Player player) {
+    private void showHelp(CommandSender sender) {
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  🤖 NguyenXiuTai AI Commands");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§a/taixiu ai status §7- Xem trạng thái AI");
+        sender.sendMessage("§a/taixiu ai streak §7- Xem cầu hiện tại");
+        sender.sendMessage("§a/taixiu ai predict §7- Dự đoán phiên sau");
+        sender.sendMessage("§a/taixiu ai player [name] §7- Phân tích người chơi");
+        sender.sendMessage("§a/taixiu ai economy §7- Xem kinh tế server");
+        sender.sendMessage("§a/taixiu ai bots §7- Xem danh sách bot");
+        sender.sendMessage("§a/taixiu ai reload §7- Reload config AI");
+        sender.sendMessage("§a/taixiu ai heatmap §7- Xem heatmap");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+
+    private void showStatus(CommandSender sender) {
         AIConfig cfg = engine.getConfig();
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§e§l  🤖 AI Status");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§7AI Enabled: " + (cfg.isEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Dynamic Ratio: " + (cfg.isDynamicRatioEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Dynamic House Edge: " + (cfg.isDynamicHouseEdgeEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Dynamic Bet Limit: " + (cfg.isDynamicBetLimitEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Streak Detection: " + (cfg.isStreakDetectionEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Prediction: " + (cfg.isPredictionEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Smart Bot: " + (cfg.isBotEnabled() ? "§a✅ (" + botSystem.getBotCount() + " bots)" : "§c❌"));
-        player.sendMessage("§7Economy Protection: " + (cfg.isEconomyProtectionEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§7Smart Bonus: " + (cfg.isSmartBonusEnabled() ? "§a✅" : "§c❌"));
-        player.sendMessage("§eCurrent Tai Ratio: §f" + String.format("%.1f%%", engine.getCurrentTaiRatio() * 100));
-        player.sendMessage("§eCurrent House Edge: §f" + String.format("%.1f%%", engine.getCurrentHouseEdge() * 100));
-        player.sendMessage("§7History: §f" + engine.getDataManager().getHistorySize() + " sessions");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  🤖 AI Status");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§7AI Enabled: " + (cfg.isEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Dynamic Ratio: " + (cfg.isDynamicRatioEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Dynamic House Edge: " + (cfg.isDynamicHouseEdgeEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Dynamic Bet Limit: " + (cfg.isDynamicBetLimitEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Streak Detection: " + (cfg.isStreakDetectionEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Prediction: " + (cfg.isPredictionEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Smart Bot: " + (cfg.isBotEnabled() ? "§a✅ (" + botSystem.getBotCount() + " bots)" : "§c❌"));
+        sender.sendMessage("§7Economy Protection: " + (cfg.isEconomyProtectionEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§7Smart Bonus: " + (cfg.isSmartBonusEnabled() ? "§a✅" : "§c❌"));
+        sender.sendMessage("§eCurrent Tai Ratio: §f" + String.format("%.1f%%", engine.getCurrentTaiRatio() * 100));
+        sender.sendMessage("§eCurrent House Edge: §f" + String.format("%.1f%%", engine.getCurrentHouseEdge() * 100));
+        sender.sendMessage("§7History: §f" + engine.getDataManager().getHistorySize() + " sessions");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
     private void showStreak(Player player) {
@@ -121,7 +136,6 @@ public class AICommand implements CommandExecutor {
             String side = streak.side ? "§aTài" : "§cXỉu";
             player.sendMessage("§7Cầu đang ra: " + side + " §7x" + streak.count);
 
-            // Visual streak bar
             StringBuilder bar = new StringBuilder("§7[");
             for (int i = 0; i < Math.min(streak.count, 15); i++) {
                 bar.append(streak.side ? "§a■" : "§c■");
@@ -136,7 +150,6 @@ public class AICommand implements CommandExecutor {
             player.sendMessage("§7Không có cầu đặc biệt");
         }
 
-        // Show last 20 results
         boolean[] recent = engine.getDataManager().getRecentResults(20);
         if (recent.length > 0) {
             StringBuilder history = new StringBuilder("§7Lịch sử: ");
@@ -157,7 +170,6 @@ public class AICommand implements CommandExecutor {
         player.sendMessage("§aTài: §f" + String.format("%.0f%%", pred.taiProb * 100) + " §7| §cXỉu: §f" + String.format("%.0f%%", pred.xiuProb * 100));
         player.sendMessage("§7" + pred.analysis);
 
-        // Visual bar
         int taiBar = (int)(pred.taiProb * 20);
         StringBuilder bar = new StringBuilder("§7[");
         for (int i = 0; i < 20; i++) {
@@ -184,35 +196,35 @@ public class AICommand implements CommandExecutor {
         player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
-    private void showEconomy(Player player) {
+    private void showEconomy(CommandSender sender) {
         AIEngine.EconomyStatus status = engine.checkEconomy();
         AIDataManager.DailyStats ds = engine.getDataManager().getTodayStats();
 
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§e§l  💰 Kinh tế hôm nay");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§7Tổng phiên: §f" + ds.totalSessions);
-        player.sendMessage("§7Tài: §a" + ds.taiCount + " §7| Xỉu: §c" + ds.xiuCount);
-        player.sendMessage("§7Tổng cược Tài: §f" + df.format(ds.totalTaiWagered));
-        player.sendMessage("§7Tổng cược Xỉu: §f" + df.format(ds.totalXiuWagered));
-        player.sendMessage("§7Lãi/lỗ người chơi: §f" + df.format(ds.totalPlayerProfit));
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  💰 Kinh tế hôm nay");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§7Tổng phiên: §f" + ds.totalSessions);
+        sender.sendMessage("§7Tài: §a" + ds.taiCount + " §7| Xỉu: §c" + ds.xiuCount);
+        sender.sendMessage("§7Tổng cược Tài: §f" + df.format(ds.totalTaiWagered));
+        sender.sendMessage("§7Tổng cược Xỉu: §f" + df.format(ds.totalXiuWagered));
+        sender.sendMessage("§7Lãi/lỗ người chơi: §f" + df.format(ds.totalPlayerProfit));
 
         if (status.needsAction) {
-            player.sendMessage("§c⚠️ " + status.message);
+            sender.sendMessage("§c⚠️ " + status.message);
         } else {
-            player.sendMessage("§a✅ Kinh tế ổn định");
+            sender.sendMessage("§a✅ Kinh tế ổn định");
         }
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
-    private void showBots(Player player) {
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        player.sendMessage("§e§l  🤖 Smart Bots");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    private void showBots(CommandSender sender) {
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§e§l  🤖 Smart Bots");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         for (String name : botSystem.getBotNames()) {
-            player.sendMessage("§7• §f" + name);
+            sender.sendMessage("§7• §f" + name);
         }
-        player.sendMessage("§7Tổng: §f" + botSystem.getBotCount() + " bots");
-        player.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage("§7Tổng: §f" + botSystem.getBotCount() + " bots");
+        sender.sendMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 }

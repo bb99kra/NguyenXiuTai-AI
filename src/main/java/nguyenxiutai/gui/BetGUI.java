@@ -127,8 +127,14 @@ public class BetGUI {
         return false;
     }
 
+    // FIX #8: Actually return player balance from economy
     private static double getPlayerBalance(Player player, GameManager gm) {
-        return 0.0;
+        return gm.getEconomyManager().getBalance(player.getUniqueId());
+    }
+
+    // FIX: Cleanup selected amount on quit
+    public static void cleanupPlayer(UUID uuid) {
+        selectedAmount.remove(uuid);
     }
 
     private static ItemStack makeItem(Material mat, String name, List<String> lore) {

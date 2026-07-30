@@ -45,7 +45,13 @@ extends PlaceholderExpansion {
     }
 
     public String getVersion() {
-        return "1.2.0";
+        try {
+            return nguyenxiutai.NguyenXiuTaiPlugin.class.getPackage().getImplementationVersion() != null
+                ? nguyenxiutai.NguyenXiuTaiPlugin.class.getPackage().getImplementationVersion()
+                : "1.3.0-AI";
+        } catch (Exception e) {
+            return "1.3.0-AI";
+        }
     }
 
     public boolean persist() {

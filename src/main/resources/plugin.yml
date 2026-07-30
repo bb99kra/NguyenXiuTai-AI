@@ -1,11 +1,12 @@
 name: NguyenXiuTai
-version: 1.2.0
+version: '${project.version}'
 main: nguyenxiutai.NguyenXiuTaiPlugin
 api-version: 1.20
-softdepend:
+depend:
   - Vault
+softdepend:
   - PlaceholderAPI
-description: Tai Xiu gambling game plugin
+description: Tai Xiu gambling game plugin with AI analytics
 commands:
   tai:
     description: Dat cuoc Tai
@@ -14,8 +15,8 @@ commands:
     description: Dat cuoc Xiu
     usage: /xiu <so tien>
   taixiu:
-    description: Mo giao dien Tai Xiu
-    usage: /taixiu [reload]
+    description: Mo giao dien Tai Xiu / AI commands
+    usage: /taixiu [reload|ai <status|streak|predict|player|economy|bots|reload>]
   cau:
     description: Xem cau Tai Xiu
     usage: /cau
