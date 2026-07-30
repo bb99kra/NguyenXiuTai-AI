@@ -84,23 +84,47 @@ public class DailyBonusManager {
     }
 
     public long claim(Player player) {
+        long bonus = calculateBonus(player);
+        if (bonus > 0) {
+            markClaimed(player);
+        }
+        return bonus;
+    }
+
+    /**
+     * Calculate bonus amount WITHOUT marking as claimed.
+     * Use this + deposit + markClaimed for safe atomic flow.
+     */
+    public long calculateBonus(Player player) {
         UUID uuid = player.getUniqueId();
         String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
-        String yesterday = LocalDate.now().minusDays(1L).format(DateTimeFormatter.ISO_LOCAL_DATE);
         String lastClaim = this.lastClaimDate.get(uuid);
         if (today.equals(lastClaim)) {
             return -1L;
         }
+        String yesterday = LocalDate.now().minusDays(1L).format(DateTimeFormatter.ISO_LOCAL_DATE);
         int currentStreak = this.streak.getOrDefault(uuid, 0);
         currentStreak = yesterday.equals(lastClaim) ? ++currentStreak : 1;
-        this.streak.put(uuid, currentStreak);
         long bonus = this.bonusAmount;
         if (currentStreak >= this.streakMultiplierDays) {
             bonus = (long)((double)bonus * this.streakMultiplier);
         }
+        return bonus;
+    }
+
+    /**
+     * Mark player as claimed today. Call ONLY after successful deposit.
+     */
+    public void markClaimed(Player player) {
+        UUID uuid = player.getUniqueId();
+        String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String yesterday = LocalDate.now().minusDays(1L).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String lastClaim = this.lastClaimDate.get(uuid);
+        int currentStreak = this.streak.getOrDefault(uuid, 0);
+        currentStreak = yesterday.equals(lastClaim) ? ++currentStreak : 1;
+        this.streak.put(uuid, currentStreak);
         this.lastClaimDate.put(uuid, today);
         this.save();
-        return bonus;
     }
 
     public int getStreak(Player player) {

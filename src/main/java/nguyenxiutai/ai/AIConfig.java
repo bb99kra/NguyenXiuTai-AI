@@ -53,6 +53,7 @@ public class AIConfig {
     private boolean economyProtectionEnabled = true;
     private long dailyProfitLimit = 2000000;   // Gioi han loi/ngay
     private long dailyLossLimit = -3000000;    // Gioi han lo/ngay
+    private long playerDailyLossLimit = -500000; // Per-player daily loss limit
     private long autoInjectThreshold = 100000; // Quy thap thi inject
     private long autoInjectAmount = 200000;    // So tien inject
 
@@ -105,6 +106,7 @@ public class AIConfig {
         economyProtectionEnabled = c.getBoolean("economy.protection-enabled", true);
         dailyProfitLimit = c.getLong("economy.daily-profit-limit", 2000000);
         dailyLossLimit = c.getLong("economy.daily-loss-limit", -3000000);
+        playerDailyLossLimit = c.getLong("economy.player-daily-loss-limit", -500000);
         autoInjectThreshold = c.getLong("economy.auto-inject-threshold", 100000);
         autoInjectAmount = c.getLong("economy.auto-inject-amount", 200000);
 
@@ -151,6 +153,7 @@ public class AIConfig {
         c.set("economy.protection-enabled", true);
         c.set("economy.daily-profit-limit", 2000000);
         c.set("economy.daily-loss-limit", -3000000);
+        c.set("economy.player-daily-loss-limit", -500000);
         c.set("economy.auto-inject-threshold", 100000);
         c.set("economy.auto-inject-amount", 200000);
         c.set("economy.smart-bonus-enabled", true);
@@ -194,6 +197,7 @@ public class AIConfig {
     public boolean isEconomyProtectionEnabled() { return economyProtectionEnabled; }
     public long getDailyProfitLimit() { return dailyProfitLimit; }
     public long getDailyLossLimit() { return dailyLossLimit; }
+    public long getPlayerDailyLossLimit() { return playerDailyLossLimit; }
     public long getAutoInjectThreshold() { return autoInjectThreshold; }
     public long getAutoInjectAmount() { return autoInjectAmount; }
     public boolean isSmartBonusEnabled() { return smartBonusEnabled; }

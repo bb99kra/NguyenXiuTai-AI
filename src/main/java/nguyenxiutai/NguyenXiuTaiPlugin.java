@@ -32,7 +32,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -44,6 +43,9 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
     private BossBarManager bossBarManager;
     private StatsManager statsManager;
     private final Map<UUID, Boolean> waitingBet = new ConcurrentHashMap<>();
+    // Anti-spam: track last bet message time per player
+    private final Map<UUID, Long> lastBetMsgTime = new ConcurrentHashMap<>();
+    private static final long BET_CHAT_COOLDOWN_MS = 1000; // 1 second debounce
 
     // AI Components
     private AIConfig aiConfig;
@@ -254,17 +256,6 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    // FIX #8: Cleanup selected amount when BetGUI is closed
-    @EventHandler
-    public void onInventoryClose(InventoryCloseEvent e) {
-        if (e.getView().getTitle().equals("§6§lTài Xỉu - Chọn tiền")) {
-            if (e.getPlayer() instanceof Player) {
-                // Don't remove immediately - handleClick removes it when betting
-                // Only cleanup on quit (handled in onQuit)
-            }
-        }
-    }
-
     private void handleDailyBonus(Player p) {
         DailyBonusManager dbm = this.gameManager.getDailyBonusManager();
         if (dbm == null) {
@@ -276,22 +267,27 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
             p.closeInventory();
             return;
         }
-        long bonus = dbm.claim(p);
-        if (bonus > 0) {
-            boolean ok = this.gameManager.getEconomyManager().deposit(p.getUniqueId(), bonus);
-            if (!ok) {
-                p.sendMessage("§cLỗi khi nhận thưởng! Thử lại sau.");
-                p.closeInventory();
-                return;
-            }
-            String cur = this.gameManager.getCurrencySymbol();
-            String formatted = this.gameManager.getCurrencyFormat().format(bonus);
-            p.sendMessage("§a✅ Nhận thưởng hàng ngày: §e" + formatted + " " + cur);
-            int streak = dbm.getStreak(p);
-            p.sendMessage("§7Streak: §e" + streak + " ngày");
-            if (streak >= dbm.getStreakMultiplierDays()) {
-                p.sendMessage("§a✔ Bonus x" + String.format("%.1f", dbm.getStreakMultiplier()) + " streak!");
-            }
+        // Calculate bonus first, deposit, THEN mark as claimed
+        long bonus = dbm.calculateBonus(p);
+        if (bonus <= 0) {
+            p.closeInventory();
+            return;
+        }
+        boolean ok = this.gameManager.getEconomyManager().deposit(p.getUniqueId(), bonus);
+        if (!ok) {
+            p.sendMessage("§cLỗi khi nhận thưởng! Thử lại sau.");
+            p.closeInventory();
+            return;
+        }
+        // Only mark claimed AFTER successful deposit
+        dbm.markClaimed(p);
+        String cur = this.gameManager.getCurrencySymbol();
+        String formatted = this.gameManager.getCurrencyFormat().format(bonus);
+        p.sendMessage("§a✅ Nhận thưởng hàng ngày: §e" + formatted + " " + cur);
+        int streak = dbm.getStreak(p);
+        p.sendMessage("§7Streak: §e" + streak + " ngày");
+        if (streak >= dbm.getStreakMultiplierDays()) {
+            p.sendMessage("§a✔ Bonus x" + String.format("%.1f", dbm.getStreakMultiplier()) + " streak!");
         }
         p.closeInventory();
     }
@@ -310,6 +306,15 @@ public class NguyenXiuTaiPlugin extends JavaPlugin implements Listener {
             p.sendMessage(this.gameManager.getMsgHuy());
             return;
         }
+
+        // Anti-spam: debounce bet messages
+        long now = System.currentTimeMillis();
+        Long lastTime = lastBetMsgTime.get(uuid);
+        if (lastTime != null && (now - lastTime) < BET_CHAT_COOLDOWN_MS) {
+            p.sendMessage("§7Đợi chút...");
+            return;
+        }
+        lastBetMsgTime.put(uuid, now);
 
         boolean isTai = this.waitingBet.remove(uuid);
         long amount = GameManager.parseAmount(msg);
