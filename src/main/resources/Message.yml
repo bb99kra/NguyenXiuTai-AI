@@ -1,0 +1,77 @@
+# ============================================================
+#  NguyenXiuTai - Message.yml
+#  Tuy chinh tat ca hien thi trong plugin
+#  Ho tro placeholder: {amount}, {player}, {min}, {max}, {session}
+#  Ma mau: &0-&9, &a-&f, &l, &n, &o, &k, &r
+# ============================================================
+
+# ---- Tin nhan chat ----
+messages:
+  dat-tai-thanh-cong: "&a✅ Đặt tài &a{amount} &fthành công!"
+  dat-xiu-thanh-cong: "&a✅ Đặt xỉu &a{amount} &fthành công!"
+  khong-du-tien: "&c❌ Không đủ tiền!"
+  vuot-qua-gioi-han: "&c❌ Tiền từ {min} đến {max}!"
+  dang-quay: "&e🎲 Đang quay kết quả..."
+  no-hu: "&6🎉 Nổ hũ! &f{player} &6trúng &f{amount}!"
+  khong-co-cuoc: "&c❌ Không có phiên nào mở!"
+  nhap-so-tien: "&e📝 Nhập số tiền muốn cược (10k, 1M...). Gõ 'huy' để hủy."
+  huy-cuoc: "&c❌ Đã hủy đặt cược."
+  da-dat-ben-kia: "&c❌ Bạn đã đặt tài rồi!"
+  da-dat-ben-nay: "&c❌ Bạn đã đặt xỉu rồi!"
+  thang-cuoc: "&a✅ Thắng! +{amount} {currency}"
+  ket-qua: "&6🎲 &f{dice} = &e{total} &f→ {result}"
+  phien-moi: "&a&l✦ Phiên #{session} đã bắt đầu!"
+  hoan-tien-shutdown: "&e⚠ Server đóng/cộng lại, đã hoàn tiền: {amount} {currency}"
+  # Tin nhan payout can bang
+  payout-info: "&7Payout: &e{multiplier}x &7(Tài:{tai_total} | Xỉu:{xiu_total})"
+
+# ---- BossBar ----
+bossbar:
+  dang-cuoc: "Phiên #{session} | Tài ({tai_total}{currency}) | Xỉu ({xiu_total}{currency}) | Hũ ({hu}{currency}) | {time}s"
+  dang-quay: "Phiên #{session} | Đang quay... | Tài ({tai_total}{currency}) | Xỉu ({xiu_total}{currency})"
+  ket-qua: "Phiên #{session} | {result} | Tài: {tai_total}{currency} | Xỉu: {xiu_total}{currency}"
+
+# ---- GUI ----
+gui:
+  main-title: "tài xỉu"
+  cau-title: "Kết quả cầu"
+  main-info-name: "&6🎲 Phiên #{session}"
+  main-info-lore:
+    - "&7Tổng: &e{total} {currency}"
+    - "&7Hũ: &e{hu} {currency}"
+    - "&7Thời gian: &e{time}s"
+  main-tai-name: "&a🏆 Tài"
+  main-tai-lore:
+    - "&7Tổng: &a{amount} {currency}"
+    - "&7Người: &a{count}"
+    - ""
+    - "&a▶ &eClick để đặt"
+  main-xiu-name: "&c🏆 Xỉu"
+  main-xiu-lore:
+    - "&7Tổng: &c{amount} {currency}"
+    - "&7Người: &c{count}"
+    - ""
+    - "&c▶ &eClick để đặt"
+  cau-header-name: "&6📈 Kết quả cầu"
+  cau-header-lore:
+    - "&7Tất cả kết quả gần đây"
+    - ""
+    - "&a● = tài (ngọc lục bảo)"
+    - "&c● = xỉu (kim cương)"
+  cau-stats-name: "&6📊 Thống kê"
+  cau-back-name: "&e← Quay lại"
+  cau-tai-label: " &aTài"
+  cau-xiu-label: " &cXỉu"
+
+# ---- Discord Webhook ----
+discord:
+  embed-title: "🎲 Phiên #{session}"
+  embed-color-tai: 65280
+  embed-color-xiu: 16711680
+  field-dice: "Xúc xắc"
+  field-ketqua: "Kết quả"
+  field-tongcuoc: "Tổng cược"
+  field-hu: "Hũ"
+  field-nguoichoi: "Người chơi"
+  field-jackpot: "🎉 Nổ hũ"
+  footer-text: "NguyenXiuTai v1.2.0"

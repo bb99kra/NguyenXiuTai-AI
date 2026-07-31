@@ -1,0 +1,23 @@
+thoi-gian-dat-cuoc: 45
+thoi-gian-quay: 5
+so-tien-ban-dau-hu: 500000
+cuoc-toi-thieu: 1000
+cuoc-toi-da: 10000000
+ti-le-no-hu: 100
+so-tien-no-hu: 5000000
+tien-te: 'đ'
+format-tien: '#,###'
+bossbar-mau: 'RED'
+bossbar-kieu: 'SEGMENTED_10'
+auto-save-interval: 300
+# Can bang payout: true = pool-based (chia pot thua), false = fixed 2x
+can-bang-payout: true
+# Phan tram house edge (5% = mac dinh)
+house-edge: 5
+# Daily bonus
+# So tien bonus moi ngay
+daily-bonus-amount: 10000
+# So ngay streak de nhan bonus x2
+daily-bonus-streak-days: 7
+# He so nhan khi dat streak
+daily-bonus-streak-multiplier: 2.0

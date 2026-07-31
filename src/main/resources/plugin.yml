@@ -1,0 +1,29 @@
+name: NguyenXiuTai
+version: '${project.version}'
+main: nguyenxiutai.NguyenXiuTaiPlugin
+api-version: 1.20
+depend:
+  - Vault
+softdepend:
+  - PlaceholderAPI
+description: Tai Xiu gambling game plugin with AI analytics
+commands:
+  tai:
+    description: Dat cuoc Tai
+    usage: /tai <so tien>
+  xiu:
+    description: Dat cuoc Xiu
+    usage: /xiu <so tien>
+  taixiu:
+    description: Mo giao dien Tai Xiu / AI commands
+    usage: /taixiu [reload|ai <status|streak|predict|player|economy|bots|reload>]
+  cau:
+    description: Xem cau Tai Xiu
+    usage: /cau
+permissions:
+  nguyenxiutai.admin:
+    description: Admin permission (reload, economy, bots, player analysis)
+    default: op
+  nguyenxiutai.ai.view:
+    description: View AI status, streak, prediction
+    default: true

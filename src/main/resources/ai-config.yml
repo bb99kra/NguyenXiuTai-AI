@@ -1,0 +1,71 @@
+# ============================================
+# NguyenXiuTai AI Configuration
+# ============================================
+
+ai:
+  enabled: true
+
+# === NHÓM 1: Điều chỉnh tỷ lệ ===
+ratio:
+  dynamic-enabled: true
+  window-size: 50          # Số phiên gần nhất để phân tích
+  max-adjustment: 0.10     # Điều chỉnh tối đa 10%
+
+house-edge:
+  dynamic-enabled: true
+  min: 0.02                # 2% khi quỹ cao
+  max: 0.12                # 12% khi quỹ thấp
+  quy-threshold-low: 200000
+  quy-threshold-high: 5000000
+
+bet-limit:
+  dynamic-enabled: true
+  floor: 500000            # Max bet tối thiểu
+  ceiling: 15000000        # Max bet tối đa
+  win-streak-threshold: 5  # Giảm max bet khi thắng streak
+
+# === NHÓM 2: Phân tích dữ liệu ===
+analytics:
+  streak-detection: true
+  streak-alert-threshold: 8
+  player-analysis: true
+  player-min-sessions: 10
+  prediction: true
+  prediction-lookback: 20
+
+# === NHÓM 3: Smart Bot ===
+bot:
+  enabled: true
+  count: 5
+  min-bet: 5000
+  max-bet: 500000
+  streak-reaction: 0.6     # Bot đặt ngược streak 60%
+  fund-balance-ratio: 0.3
+
+# === NHÓM 4: Quản lý kinh tế ===
+economy:
+  protection-enabled: true
+  daily-profit-limit: 2000000
+  daily-loss-limit: -3000000
+  auto-inject-threshold: 100000
+  auto-inject-amount: 200000
+  smart-bonus-enabled: true
+  loss-streak-for-bonus: 5
+  bonus-amount: 50000
+  player-daily-loss-limit: -500000
+
+# === NHÓM 5: Economy Tracker (M2) ===
+economy-tracker:
+  inflation-threshold: 0.15    # 15% M2 growth/day = inflation alert
+  deflation-threshold: -0.10   # -10% M2 growth/day = deflation alert
+  min-sessions: 10             # Cần 10 phiên để tính trend
+  edge-smoothing: 0.3          # Smoothing factor (0-1)
+
+# === NHÓM 6: Anti-Farming Detection ===
+abuse-detection:
+  bonus-ratio-threshold: 0.4   # Flag nếu >40% sessions nhận bonus
+  min-sessions: 5              # Cần 5+ sessions trước khi flag
+  new-account-ms: 3600000      # Account < 1 giờ = suspicious
+  min-bet-farming-count: 3     # 3+ lần cược tối thiểu liên tiếp
+  auto-block: false            # true = auto block, false = flag only
+  ip-cluster-threshold: 3      # 3+ accounts cùng IP
